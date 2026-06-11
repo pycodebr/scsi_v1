@@ -1,0 +1,130 @@
+{% extends 'base_app.html' %}
+
+{% block title %}{% if form.instance.pk %}Editar cliente{% else %}Novo cliente{% endif %} — SCSI{% endblock %}
+{% block page_title %}{% if form.instance.pk %}Editar cliente{% else %}Novo cliente{% endif %}{% endblock %}
+
+{% block breadcrumb %}
+    <li class="breadcrumb-item"><a href="/">Início</a></li>
+    <li class="breadcrumb-item"><a href="{% url 'clients:client_list' %}">Clientes</a></li>
+    <li class="breadcrumb-item active">{% if form.instance.pk %}Editar{% else %}Novo{% endif %}</li>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-12 col-lg-10">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body p-4">
+                {% if messages %}
+                {% for message in messages %}
+                <div class="alert alert-{{ message.tags }} py-2" role="alert">{{ message }}</div>
+                {% endfor %}
+                {% endif %}
+
+                <form method="post" novalidate>
+                    {% csrf_token %}
+
+                    <h6 class="border-bottom pb-2 mb-3">Dados principais</h6>
+                    <div class="row">
+                        <div class="col-md-3 mb-3">
+                            <label for="{{ form.person_type.id_for_label }}" class="form-label">Tipo de pessoa</label>
+                            {{ form.person_type }}
+                            {% if form.person_type.errors %}<div class="text-danger small">{{ form.person_type.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="col-md-5 mb-3">
+                            <label for="{{ form.name.id_for_label }}" class="form-label">Nome / Razão social *</label>
+                            {{ form.name }}
+                            {% if form.name.errors %}<div class="text-danger small">{{ form.name.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label for="{{ form.trade_name.id_for_label }}" class="form-label">Nome fantasia</label>
+                            {{ form.trade_name }}
+                            {% if form.trade_name.errors %}<div class="text-danger small">{{ form.trade_name.errors.0 }}</div>{% endif %}
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-3 mb-3">
+                            <label for="{{ form.document.id_for_label }}" class="form-label">CPF / CNPJ *</label>
+                            {{ form.document }}
+                            {% if form.document.errors %}<div class="text-danger small">{{ form.document.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label for="{{ form.email.id_for_label }}" class="form-label">E-mail</label>
+                            {{ form.email }}
+                            {% if form.email.errors %}<div class="text-danger small">{{ form.email.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label for="{{ form.phone.id_for_label }}" class="form-label">Telefone</label>
+                            {{ form.phone }}
+                            {% if form.phone.errors %}<div class="text-danger small">{{ form.phone.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="col-md-2 mb-3">
+                            <label for="{{ form.birth_date.id_for_label }}" class="form-label">Nascimento</label>
+                            {{ form.birth_date }}
+                            {% if form.birth_date.errors %}<div class="text-danger small">{{ form.birth_date.errors.0 }}</div>{% endif %}
+                        </div>
+                    </div>
+
+                    <h6 class="border-bottom pb-2 mb-3">Endereço</h6>
+                    <div class="row">
+                        <div class="col-md-5 mb-3">
+                            <label for="{{ form.address_street.id_for_label }}" class="form-label">Logradouro</label>
+                            {{ form.address_street }}
+                            {% if form.address_street.errors %}<div class="text-danger small">{{ form.address_street.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="col-md-2 mb-3">
+                            <label for="{{ form.address_number.id_for_label }}" class="form-label">Número</label>
+                            {{ form.address_number }}
+                            {% if form.address_number.errors %}<div class="text-danger small">{{ form.address_number.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label for="{{ form.address_complement.id_for_label }}" class="form-label">Complemento</label>
+                            {{ form.address_complement }}
+                            {% if form.address_complement.errors %}<div class="text-danger small">{{ form.address_complement.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="col-md-2 mb-3">
+                            <label for="{{ form.address_zip.id_for_label }}" class="form-label">CEP</label>
+                            {{ form.address_zip }}
+                            {% if form.address_zip.errors %}<div class="text-danger small">{{ form.address_zip.errors.0 }}</div>{% endif %}
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label for="{{ form.address_neighborhood.id_for_label }}" class="form-label">Bairro</label>
+                            {{ form.address_neighborhood }}
+                            {% if form.address_neighborhood.errors %}<div class="text-danger small">{{ form.address_neighborhood.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label for="{{ form.address_city.id_for_label }}" class="form-label">Cidade</label>
+                            {{ form.address_city }}
+                            {% if form.address_city.errors %}<div class="text-danger small">{{ form.address_city.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="col-md-2 mb-3">
+                            <label for="{{ form.address_state.id_for_label }}" class="form-label">UF</label>
+                            {{ form.address_state }}
+                            {% if form.address_state.errors %}<div class="text-danger small">{{ form.address_state.errors.0 }}</div>{% endif %}
+                        </div>
+                    </div>
+
+                    <h6 class="border-bottom pb-2 mb-3">Observações</h6>
+                    <div class="mb-3">
+                        {{ form.notes }}
+                        {% if form.notes.errors %}<div class="text-danger small">{{ form.notes.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    {% if form.non_field_errors %}
+                    <div class="alert alert-danger py-2">{{ form.non_field_errors }}</div>
+                    {% endif %}
+
+                    <div class="d-flex justify-content-between mt-3">
+                        <a href="{% url 'clients:client_list' %}" class="btn btn-outline-secondary">Cancelar</a>
+                        <button type="submit" class="btn btn-primary">
+                            {% if form.instance.pk %}Salvar{% else %}Criar cliente{% endif %}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,30 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block body_class %}bg-light{% endblock %}
+
+{% block body %}
+<main class="auth-minimal-wrapper">
+    <div class="d-flex align-items-center justify-content-center min-vh-100 p-3">
+        <div class="col-12 col-sm-10 col-md-6 col-lg-4">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body p-4 p-md-5">
+                    <div class="text-center mb-4">
+                        <a href="/" class="d-inline-block">
+                            <img src="{% static 'vendor/duralux/images/logo-full.png' %}" alt="SCSI" height="32">
+                        </a>
+                    </div>
+
+                    {% if messages %}
+                        {% for message in messages %}
+                            <div class="alert alert-{{ message.tags }} py-2" role="alert">{{ message }}</div>
+                        {% endfor %}
+                    {% endif %}
+
+                    {% block auth_content %}{% endblock %}
+                </div>
+            </div>
+        </div>
+    </div>
+</main>
+{% endblock %}

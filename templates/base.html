@@ -1,0 +1,23 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}SCSI — Corretora de Seguros Inteligente{% endblock %}</title>
+    <link rel="shortcut icon" type="image/x-icon" href="{% static 'images/favicon.ico' %}">
+
+    {# Design System: Duralux (fonte de verdade visual — ver PRD seção 38) #}
+    <link rel="stylesheet" href="{% static 'vendor/duralux/css/bootstrap.min.css' %}">
+    <link rel="stylesheet" href="{% static 'vendor/duralux/css/vendors.min.css' %}">
+    <link rel="stylesheet" href="{% static 'vendor/duralux/css/theme.min.css' %}">
+    <link rel="stylesheet" href="{% static 'css/tokens.css' %}">
+    {% block extra_css %}{% endblock %}
+</head>
+<body class="{% block body_class %}{% endblock %}">
+    {% block body %}{% endblock %}
+
+    <script src="{% static 'js/app.js' %}"></script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>
