@@ -68,9 +68,10 @@ services:
         - "traefik.http.routers.traefik-dashboard.entrypoints=websecure"
         - "traefik.http.routers.traefik-dashboard.tls.certresolver=letsencrypt"
         - "traefik.http.routers.traefik-dashboard.service=api@internal"
-        # Basic Auth (substitua pelo hash gerado com: htpasswd -nB admin)
+        # Basic Auth (hash bcrypt de htpasswd -nbB admin; '$' duplicados p/ o Swarm)
+        # Usuario: admin | Senha: sCs!@Tr@$fiK110726
         - "traefik.http.routers.traefik-dashboard.middlewares=traefik-auth"
-        - "traefik.http.middlewares.traefik-auth.basicauth.users=admin:sCs!@Tr@$fiK110726"
+        - "traefik.http.middlewares.traefik-auth.basicauth.users=admin:$$2y$$05$$C7x/Q7A/97p2XcosPjO/deKhfyX3TmHqdibOFlEqpM1Z0Cntp.QcC"
         - "traefik.http.services.traefik-dashboard.loadbalancer.server.port=8080"
       resources:
         limits:
@@ -110,10 +111,7 @@ services:
 
   db:
     image: postgres:16
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    env_file: .env
     volumes:
       - pg_data:/var/lib/postgresql/data
     networks:
@@ -121,9 +119,7 @@ services:
 
   rabbitmq:
     image: rabbitmq:3-management
-    environment:
-      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
+    env_file: .env
     networks:
       - scsi_v1_internal
 
