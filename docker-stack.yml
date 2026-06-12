@@ -141,6 +141,9 @@ services:
         - "traefik.http.services.scsi.loadbalancer.server.port=8000"
         - "traefik.http.services.scsi.loadbalancer.healthcheck.path=/health/"
         - "traefik.http.services.scsi.loadbalancer.healthcheck.interval=15s"
+        # Host enviado no healthcheck do LB; sem isto o Traefik usa o IP da task
+        # (ex.: 10.0.1.x), que não está no ALLOWED_HOSTS → 400 DisallowedHost.
+        - "traefik.http.services.scsi.loadbalancer.healthcheck.hostname=${DOMAIN:-scsi.digital}"
         - "traefik.http.middlewares.scsi-ratelimit.ratelimit.average=100"
         - "traefik.http.middlewares.scsi-ratelimit.ratelimit.burst=50"
         - "traefik.http.routers.scsi.middlewares=scsi-ratelimit"
