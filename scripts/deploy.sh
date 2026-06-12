@@ -6,7 +6,7 @@ set -euo pipefail
 
 DOMAIN="${DOMAIN:-scsi.digital}"
 REGISTRY="${REGISTRY:-registry.example.com/scsi:latest}"
-STACK_NAME="scsi"
+STACK_NAME="scsi_v1"
 
 echo "=== SCSI Deploy ==="
 
