@@ -46,7 +46,7 @@ services:
       - static_data:/app/staticfiles
     networks:
       - traefik_public
-      - internal
+      - scsi_v1_internal
     deploy:
       replicas: 2
       labels:
@@ -72,7 +72,7 @@ services:
     volumes:
       - pg_data:/var/lib/postgresql/data
     networks:
-      - internal
+      - scsi_v1_internal
 
   rabbitmq:
     image: rabbitmq:3-management
@@ -80,12 +80,12 @@ services:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
     networks:
-      - internal
+      - scsi_v1_internal
 
   redis:
     image: redis:7
     networks:
-      - internal
+      - scsi_v1_internal
 
   celery_worker:
     image: registry.example.com/scsi:latest
@@ -94,7 +94,7 @@ services:
     volumes:
       - media_data:/app/media
     networks:
-      - internal
+      - scsi_v1_internal
     deploy:
       replicas: 2
 
@@ -103,12 +103,12 @@ services:
     command: celery -A core beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler
     env_file: .env
     networks:
-      - internal
+      - scsi_v1_internal
 
 networks:
   traefik_public:
     external: true
-  internal:
+  scsi_v1_internal:
 
 volumes:
   pg_data:
