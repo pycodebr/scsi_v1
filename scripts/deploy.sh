@@ -5,7 +5,7 @@ set -euo pipefail
 # Usage: ./scripts/deploy.sh [build]
 
 DOMAIN="${DOMAIN:-scsi.digital}"
-REGISTRY="${REGISTRY:-registry.example.com/scsi:latest}"
+REGISTRY="${REGISTRY:-ghcr.io/pycodebr/scsi_v1:latest}"
 STACK_NAME="scsi_v1"
 
 echo "=== SCSI Deploy ==="

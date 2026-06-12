@@ -98,8 +98,8 @@ nano .env   # Preencher SECRET_KEY, DB, RabbitMQ, OPENAI_API_KEY, ACME_EMAIL, et
 
 ```bash
 docker login registry.example.com
-docker build -t registry.example.com/scsi:latest .
-docker push registry.example.com/scsi:latest
+docker build -t ghcr.io/pycodebr/scsi_v1:latest .
+docker push ghcr.io/pycodebr/scsi_v1:latest
 ```
 
 Ou usar o script de deploy:
@@ -170,10 +170,10 @@ docker volume ls | grep scsi
 ## Atualização (rolling update)
 
 ```bash
-docker build -t registry.example.com/scsi:latest .
-docker push registry.example.com/scsi:latest
-docker service update --image registry.example.com/scsi:latest scsi_app
-docker service update --image registry.example.com/scsi:latest scsi_celery_worker
+docker build -t ghcr.io/pycodebr/scsi_v1:latest .
+docker push ghcr.io/pycodebr/scsi_v1:latest
+docker service update --image ghcr.io/pycodebr/scsi_v1:latest scsi_app
+docker service update --image ghcr.io/pycodebr/scsi_v1:latest scsi_celery_worker
 ```
 
 ## Observações de produção
