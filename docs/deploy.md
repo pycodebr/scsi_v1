@@ -75,7 +75,7 @@ docker node ls
 ### 5. Criar rede overlay do Traefik
 
 ```bash
-docker network create --driver overlay --attachable traefik-public
+docker network create --driver overlay --attachable traefik_public
 ```
 
 ### 6. Configurar DNS

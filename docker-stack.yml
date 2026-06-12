@@ -7,7 +7,7 @@ services:
       - "--providers.docker=true"
       - "--providers.docker.swarmMode=true"
       - "--providers.docker.exposedbydefault=false"
-      - "--providers.docker.network=traefik-public"
+      - "--providers.docker.network=traefik_public"
       - "--entrypoints.web.address=:80"
       - "--entrypoints.websecure.address=:443"
       - "--certificatesresolvers.letsencrypt.acme.tlschallenge=true"
@@ -28,7 +28,7 @@ services:
       - letsencrypt:/letsencrypt
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
-      - traefik-public
+      - traefik_public
     deploy:
       replicas: 1
       placement:
@@ -45,7 +45,7 @@ services:
       - media_data:/app/media
       - static_data:/app/staticfiles
     networks:
-      - traefik-public
+      - traefik_public
       - internal
     deploy:
       replicas: 2
@@ -106,7 +106,7 @@ services:
       - internal
 
 networks:
-  traefik-public:
+  traefik_public:
     external: true
   internal:
 

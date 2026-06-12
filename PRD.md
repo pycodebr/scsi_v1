@@ -2275,7 +2275,7 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - letsencrypt:/letsencrypt
-    networks: [traefik-public]
+    networks: [traefik_public]
     deploy:
       placement:
         constraints: [node.role == manager]
@@ -2287,7 +2287,7 @@ services:
     volumes:
       - media_data:/app/media
       - static_data:/app/staticfiles
-    networks: [traefik-public, internal]
+    networks: [traefik_public, internal]
     deploy:
       replicas: 2
       labels:
@@ -2335,7 +2335,7 @@ services:
     networks: [internal]
 
 networks:
-  traefik-public:
+  traefik_public:
     external: true
   internal:
 
@@ -2392,7 +2392,7 @@ docker node ls
 ### 45.5 Criar a rede overlay do Traefik
 
 ```bash
-docker network create --driver overlay --attachable traefik-public
+docker network create --driver overlay --attachable traefik_public
 ```
 
 ### 45.6 Configurar DNS no Cloudflare
@@ -2427,7 +2427,7 @@ docker push registry.example.com/scsi:latest
 ### 45.9 Deploy das stacks
 
 ```bash
-# deploy do Traefik + app (mesmo arquivo com a rede traefik-public externa)
+# deploy do Traefik + app (mesmo arquivo com a rede traefik_public externa)
 docker stack deploy -c docker-stack.yml scsi
 docker stack services scsi
 docker service ls
@@ -3169,7 +3169,7 @@ flowchart LR
 ### Sprint 27 — Deploy com Docker Swarm
 **Objetivo:** produção.
 - [x] Preparar VPS Ubuntu (update, usuário, firewall, Docker)
-- [x] `docker swarm init` + rede `traefik-public`
+- [x] `docker swarm init` + rede `traefik_public`
 - [x] DNS Cloudflare para `scsi.digital`
 - [x] `docker-stack.yml` com Traefik + app + db + rabbitmq + redis + worker + beat
 - [x] Deploy, `migrate`, `collectstatic`, `createsuperuser`
