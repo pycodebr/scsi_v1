@@ -20,13 +20,29 @@ STACK_FILE="docker-stack.yml"
 echo "=== SCSI Deploy ==="
 
 # --- Carrega o .env no ambiente (necessário para interpolações ${...} do stack:
-#     ACME_EMAIL, DOMAIN) ---
+#     ACME_EMAIL, DOMAIN). Parser seguro: NÃO faz `source` (valores com &, $, *,
+#     espaços etc. quebrariam o shell) — apenas exporta KEY=VALUE literalmente. ---
 if [ -f .env ]; then
     echo ">>> Carregando .env..."
-    set -a
-    # shellcheck disable=SC1091
-    . ./.env
-    set +a
+    while IFS= read -r line || [ -n "$line" ]; do
+        line="${line%$'\r'}"                 # remove CR (arquivos salvos no Windows)
+        case "$line" in
+            ''|\#*) continue ;;              # ignora linha vazia / comentário
+        esac
+        [ "${line#*=}" = "$line" ] && continue   # sem '=' → ignora
+        key="${line%%=*}"
+        value="${line#*=}"
+        key="${key#"${key%%[![:space:]]*}"}"     # trim espaços à esquerda da chave
+        key="${key%"${key##*[![:space:]]}"}"     # trim espaços à direita da chave
+        case "$key" in
+            ''|*[!A-Za-z0-9_]*) continue ;;  # chave inválida → ignora
+        esac
+        case "$value" in                     # remove aspas envolventes, se houver
+            \"*\") value="${value#\"}"; value="${value%\"}" ;;
+            \'*\') value="${value#\'}"; value="${value%\'}" ;;
+        esac
+        export "$key=$value"
+    done < .env
 else
     echo "AVISO: .env não encontrado no diretório atual."
 fi
