@@ -81,11 +81,26 @@ services:
           cpus: "0.15"
           memory: 64M
 
+  migrate:
+    image: ghcr.io/pycodebr/scsi_v1:latest
+    # entrypoint.sh roda migrate (RUN_MIGRATIONS=1) + collectstatic e entao executa este command
+    command: ["echo", ">>> migrate + collectstatic concluidos"]
+    environment:
+      RUN_MIGRATIONS: "1"
+    env_file: .env
+    volumes:
+      - static_data:/app/staticfiles
+      - media_data:/app/media
+    networks:
+      - scsi_v1_internal
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: none
+
   app:
     image: ghcr.io/pycodebr/scsi_v1:latest
     command: gunicorn core.wsgi:application --bind 0.0.0.0:8000 --workers 4 --timeout 120 --graceful-timeout 30
-    environment:
-      RUN_MIGRATIONS: "1"
     env_file: .env
     volumes:
       - media_data:/app/media
