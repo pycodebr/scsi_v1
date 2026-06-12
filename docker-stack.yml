@@ -21,8 +21,7 @@ services:
       - "--entrypoints.websecure.address=:443"
       - "--entrypoints.websecure.forwardedHeaders.trustedIPs=173.245.48.0/20,103.21.244.0/22,103.22.200.0/22,103.31.4.0/22,141.101.64.0/18,108.162.192.0/18,190.93.240.0/20,188.114.96.0/20,197.234.240.0/22,198.41.128.0/17,162.158.0.0/15,104.16.0.0/13,104.24.0.0/14,172.64.0.0/13,131.0.72.0/22"
 
-      # Let's Encrypt via Cloudflare DNS-01
-      - "--certificatesresolvers.letsencrypt.acme.tlschallenge=true"
+      # Let's Encrypt via Cloudflare DNS-01 (obrigatório p/ certificado wildcard)
       - "--certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL:-admin@scsi.digital}"
       - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
       - "--certificatesresolvers.letsencrypt.acme.dnschallenge=true"
@@ -40,8 +39,10 @@ services:
       - "--accesslog=true"
       - "--accesslog.format=json"
     environment:
-      CLOUDFLARE_DNS_API_TOKEN: /run/secrets/cloudflare_api_token
-
+      # Token lido do secret via convenção _FILE (lego/Traefik leem o arquivo).
+      CF_DNS_API_TOKEN_FILE: /run/secrets/CLOUDFLARE_DNS_API_TOKEN
+    secrets:
+      - CLOUDFLARE_DNS_API_TOKEN
     ports:
       - target: 80
         published: 80
@@ -61,6 +62,11 @@ services:
       placement:
         constraints:
           - node.role == manager
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 5
+        window: 120s
       labels:
         # Dashboard
         - "traefik.enable=true"
@@ -81,26 +87,21 @@ services:
           cpus: "0.15"
           memory: 64M
 
-  migrate:
-    image: ghcr.io/pycodebr/scsi_v1:latest
-    # entrypoint.sh roda migrate (RUN_MIGRATIONS=1) + collectstatic e entao executa este command
-    command: ["echo", ">>> migrate + collectstatic concluidos"]
-    environment:
-      RUN_MIGRATIONS: "1"
-    env_file: .env
-    volumes:
-      - static_data:/app/staticfiles
-      - media_data:/app/media
-    networks:
-      - scsi_v1_internal
-    deploy:
-      replicas: 1
-      restart_policy:
-        condition: none
-
   app:
     image: ghcr.io/pycodebr/scsi_v1:latest
-    command: gunicorn core.wsgi:application --bind 0.0.0.0:8000 --workers 4 --timeout 120 --graceful-timeout 30
+    command: >
+      gunicorn core.wsgi:application
+      --bind 0.0.0.0:8000
+      --workers 4
+      --worker-class gthread
+      --threads 2
+      --timeout 120
+      --max-requests 1000
+      --max-requests-jitter 50
+      --graceful-timeout 30
+      --keep-alive 5
+      --access-logfile -
+      --error-logfile -
     env_file: .env
     volumes:
       - media_data:/app/media
@@ -108,8 +109,29 @@ services:
     networks:
       - traefik_public
       - scsi_v1_internal
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
     deploy:
       replicas: 2
+      update_config:
+        parallelism: 1
+        delay: 15s
+        order: start-first
+        failure_action: rollback
+        monitor: 30s
+      rollback_config:
+        parallelism: 1
+        delay: 5s
+        order: stop-first
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 5
+        window: 120s
       labels:
         - "traefik.enable=true"
         - "traefik.http.routers.scsi.rule=Host(`${DOMAIN:-scsi.digital}`)"
@@ -117,12 +139,18 @@ services:
         - "traefik.http.routers.scsi.tls=true"
         - "traefik.http.routers.scsi.tls.certresolver=letsencrypt"
         - "traefik.http.services.scsi.loadbalancer.server.port=8000"
+        - "traefik.http.services.scsi.loadbalancer.healthcheck.path=/health/"
+        - "traefik.http.services.scsi.loadbalancer.healthcheck.interval=15s"
         - "traefik.http.middlewares.scsi-ratelimit.ratelimit.average=100"
         - "traefik.http.middlewares.scsi-ratelimit.ratelimit.burst=50"
         - "traefik.http.routers.scsi.middlewares=scsi-ratelimit"
       resources:
         limits:
+          cpus: "1.0"
           memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 256M
 
   db:
     image: postgres:16
@@ -131,20 +159,86 @@ services:
       - pg_data:/var/lib/postgresql/data
     networks:
       - scsi_v1_internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 5
+        window: 120s
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1024M
+        reservations:
+          cpus: "0.25"
+          memory: 256M
 
   rabbitmq:
     image: rabbitmq:3-management
     env_file: .env
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
     networks:
       - scsi_v1_internal
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 5
+        window: 120s
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+        reservations:
+          cpus: "0.1"
+          memory: 256M
 
   redis:
     image: redis:7
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
     networks:
       - scsi_v1_internal
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 5
+        window: 120s
+      resources:
+        limits:
+          cpus: "0.3"
+          memory: 384M
+        reservations:
+          cpus: "0.1"
+          memory: 64M
 
   celery_worker:
     image: ghcr.io/pycodebr/scsi_v1:latest
+    entrypoint: ["./worker-entrypoint.sh"]
     command: celery -A core worker -l info
     env_file: .env
     volumes:
@@ -153,21 +247,61 @@ services:
       - scsi_v1_internal
     deploy:
       replicas: 2
+      update_config:
+        parallelism: 1
+        delay: 10s
+        order: stop-first
+        failure_action: rollback
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 5
+        window: 120s
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 256M
 
   celery_beat:
     image: ghcr.io/pycodebr/scsi_v1:latest
+    entrypoint: ["./worker-entrypoint.sh"]
     command: celery -A core beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler
     env_file: .env
     networks:
       - scsi_v1_internal
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 5
+        window: 120s
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 256M
+        reservations:
+          cpus: "0.05"
+          memory: 128M
 
 networks:
   traefik_public:
     external: true
   scsi_v1_internal:
+    driver: overlay
+    internal: true
 
 volumes:
   pg_data:
   media_data:
   static_data:
   letsencrypt:
+  redis_data:
+  rabbitmq_data:
+
+secrets:
+  CLOUDFLARE_DNS_API_TOKEN:
+    external: true

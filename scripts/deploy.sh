@@ -2,14 +2,43 @@
 set -euo pipefail
 
 # SCSI — Deploy script for Docker Swarm
-# Usage: ./scripts/deploy.sh [build]
+# Uso:
+#   ./scripts/deploy.sh            -> só redeploy do stack
+#   ./scripts/deploy.sh build      -> build + push da imagem e redeploy
+#
+# Pré-requisitos (rodar no nó manager do Swarm, no diretório do projeto):
+#   - arquivo .env presente (com DEBUG=False em produção)
+#   - secret do Cloudflare criado:
+#       printf '<TOKEN>' | docker secret create CLOUDFLARE_DNS_API_TOKEN -
+#   - rede externa criada:
+#       docker network create --driver overlay --attachable traefik_public
 
-DOMAIN="${DOMAIN:-scsi.digital}"
 REGISTRY="${REGISTRY:-ghcr.io/pycodebr/scsi_v1:latest}"
-STACK_NAME="scsi_v1"
+STACK_NAME="${STACK_NAME:-scsi_v1}"
+STACK_FILE="docker-stack.yml"
 
 echo "=== SCSI Deploy ==="
 
+# --- Carrega o .env no ambiente (necessário para interpolações ${...} do stack:
+#     ACME_EMAIL, DOMAIN) ---
+if [ -f .env ]; then
+    echo ">>> Carregando .env..."
+    set -a
+    # shellcheck disable=SC1091
+    . ./.env
+    set +a
+else
+    echo "AVISO: .env não encontrado no diretório atual."
+fi
+
+# --- Valida que o secret do Cloudflare existe (TLS depende dele) ---
+if ! docker secret inspect CLOUDFLARE_DNS_API_TOKEN >/dev/null 2>&1; then
+    echo "ERRO: secret 'CLOUDFLARE_DNS_API_TOKEN' não existe."
+    echo "      Crie com: printf '<TOKEN>' | docker secret create CLOUDFLARE_DNS_API_TOKEN -"
+    exit 1
+fi
+
+# --- Build + push (opcional) ---
 if [ "${1:-}" = "build" ]; then
     echo ">>> Building image..."
     docker build -t "$REGISTRY" .
@@ -17,25 +46,31 @@ if [ "${1:-}" = "build" ]; then
     docker push "$REGISTRY"
 fi
 
+# --- Deploy do stack ---
 echo ">>> Deploying stack..."
-docker stack deploy -c docker-stack.yml "$STACK_NAME"
+docker stack deploy -c "$STACK_FILE" --with-registry-auth "$STACK_NAME"
 
-echo ">>> Waiting for services to stabilize..."
+# --- Força rollout dos serviços que usam a imagem da aplicação (puxa :latest novo) ---
+echo ">>> Forçando rollout dos serviços da aplicação..."
+for svc in app celery_worker celery_beat; do
+    docker service update --force "${STACK_NAME}_${svc}" >/dev/null 2>&1 || true
+done
+
+echo ">>> Aguardando estabilizar..."
 sleep 10
 
-echo ">>> Service status:"
-docker service ls
+echo ">>> Status dos serviços:"
+docker service ls --format "table {{.Name}}\t{{.Mode}}\t{{.Replicas}}\t{{.Image}}" | grep -E "^${STACK_NAME}_|NAME"
 
 echo ""
-echo "=== Post-deploy commands ==="
-echo "Run migrations and collectstatic:"
+echo "=== Pós-deploy ==="
+echo "Migrations e collectstatic rodam automaticamente no entrypoint do serviço 'app'"
+echo "(com advisory lock — seguro para múltiplas réplicas)."
+echo ""
+echo "Criar superusuário (manual, 1x):"
 echo "  APP=\$(docker ps --filter name=${STACK_NAME}_app -q | head -n1)"
-echo "  docker exec -it \$APP python manage.py migrate"
-echo "  docker exec -it \$APP python manage.py collectstatic --noinput"
 echo "  docker exec -it \$APP python manage.py createsuperuser"
 echo ""
-echo "Check SSL:"
-echo "  docker service logs -f ${STACK_NAME}_traefik"
-echo ""
-echo "Check app:"
+echo "Logs:"
 echo "  docker service logs -f ${STACK_NAME}_app"
+echo "  docker service logs -f ${STACK_NAME}_traefik"

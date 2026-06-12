@@ -230,7 +230,16 @@ OPENAI_MODEL = env('OPENAI_MODEL', default='gpt-4o-mini')
 
 # Production security (active when DEBUG=False)
 if not DEBUG:
+    # TLS é terminado no Traefik; o app recebe HTTP interno com o header
+    # X-Forwarded-Proto. Sem isto o Django não reconhece que a request original
+    # foi HTTPS e entra em loop de redirect atrás do proxy.
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
     SECURE_SSL_REDIRECT = env.bool('SECURE_SSL_REDIRECT', default=True)
+    # O healthcheck do container/load balancer bate em http://localhost:8000/health/
+    # (sem passar pelo Traefik), então precisa ficar isento do redirect p/ HTTPS.
+    SECURE_REDIRECT_EXEMPT = [r'^health/$']
+
     SECURE_HSTS_SECONDS = env.int('SECURE_HSTS_SECONDS', default=31536000)
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True

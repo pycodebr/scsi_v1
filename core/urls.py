@@ -15,8 +15,19 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
+from django.http import JsonResponse
 from django.urls import include, path
 from django.views.generic import TemplateView
+
+
+def health_check(request):
+    """Endpoint leve para healthcheck do container/load balancer.
+
+    Não acessa banco nem exige autenticação — apenas confirma que o processo
+    web está de pé e respondendo. Usado pelo HEALTHCHECK do Docker Swarm e pelo
+    healthcheck do load balancer do Traefik.
+    """
+    return JsonResponse({'status': 'ok'})
 
 
 class LandingPageView(TemplateView):
@@ -29,6 +40,7 @@ class LandingPageView(TemplateView):
         return super().get(request, *args, **kwargs)
 
 urlpatterns = [
+    path('health/', health_check, name='health'),
     path('admin/', admin.site.urls),
     path('', LandingPageView.as_view(), name='landing'),
     path('dashboard/', include('dashboard.urls')),
