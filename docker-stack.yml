@@ -269,17 +269,17 @@ services:
           cpus: "0.25"
           memory: 256M
 
-  celery_beat:
+celery_beat:
     image: ghcr.io/pycodebr/scsi_v1:latest
     entrypoint: ["./worker-entrypoint.sh"]
     command: celery -A core beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler
     env_file: .env
-networks:
+    networks:
       - scsi_v1_internal
       - scsi_v1_egress
     deploy:
       replicas: 1
-    restart_policy:
+      restart_policy:
         condition: on-failure
         delay: 10s
         max_attempts: 5
