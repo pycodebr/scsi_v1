@@ -41,6 +41,6 @@ else:
 PY
 
 echo ">>> Coletando arquivos estáticos..."
-python manage.py collectstatic --noinput
+python manage.py collectstatic --noinput --clear
 
 exec "$@"
