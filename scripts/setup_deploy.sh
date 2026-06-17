@@ -157,7 +157,7 @@ ask_secret() {  # lê valor sem ecoar na tela
   echo "$answer"
 }
 
-gen_secret() { openssl rand -base64 24 2>/dev/null | tr -dc 'A-Za-z0-9' | head -c "${1:-20}"; }
+gen_secret() { openssl rand -base64 24 2>/dev/null | tr -dc 'A-Za-z0-9' | head -c "${1:-20}" || true; }
 
 # Arquivo de estado para passar dados da fase root -> fase deploy
 STATE_FILE_NAME=".setup_deploy.state"
@@ -169,12 +169,49 @@ SCRIPT_URL="${SETUP_DEPLOY_URL:-https://pycodebr.com.br/setup_deploy.sh}"
 
 # Detecta o IP PÚBLICO da VPS (para advertise-addr do Swarm e para o DNS).
 detect_public_ip() {
+  # Força IPv4 (-4): usamos registro A na Cloudflare. IPv6 seria registro AAAA.
   local ip=""
-  ip="$(curl -fsS --max-time 5 https://ifconfig.me 2>/dev/null || true)"
-  [[ -n "$ip" ]] || ip="$(curl -fsS --max-time 5 https://icanhazip.com 2>/dev/null || true)"
+  ip="$(curl -4 -fsS --max-time 5 https://api.ipify.org 2>/dev/null || true)"
+  [[ -n "$ip" ]] || ip="$(curl -4 -fsS --max-time 5 https://ifconfig.me 2>/dev/null || true)"
+  [[ -n "$ip" ]] || ip="$(curl -4 -fsS --max-time 5 https://icanhazip.com 2>/dev/null || true)"
   ip="$(printf '%s' "$ip" | tr -d '[:space:]')"
-  [[ -n "$ip" ]] || ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
+  # Fallback local: primeiro endereço IPv4 das interfaces (ignora IPv6).
+  [[ -n "$ip" ]] || ip="$(hostname -I 2>/dev/null | tr ' ' '\n' | grep -E '^[0-9]+(\.[0-9]+){3}$' | head -n1)" || true
   printf '%s' "$ip"
+}
+
+# Estado do Swarm neste nó e se ele é MANAGER (necessário p/ overlay/stack/secret).
+swarm_state() { docker info --format '{{.Swarm.LocalNodeState}}' 2>/dev/null || echo unknown; }
+is_manager()  { [[ "$(docker info --format '{{.Swarm.ControlAvailable}}' 2>/dev/null)" == "true" ]]; }
+
+# Garante que este nó seja um MANAGER do Swarm. Conserta estados inconsistentes
+# (ex.: nó "active" mas não-manager, resquício de tentativas anteriores).
+ensure_swarm_manager() {
+  is_manager && return 0
+  local ip
+  ip="$(detect_public_ip)"
+  ip="$(ask "IP público para anunciar no Swarm (advertise-addr)" "${ip:-127.0.0.1}")"
+  if [[ "$(swarm_state)" == "active" ]]; then
+    warn "O Swarm está ativo, mas este nó NÃO é manager (estado inconsistente)."
+    warn "Como ainda não há nada implantado, o seguro é resetar e reinicializar."
+    confirm_SN "Posso resetar o Swarm deste nó (docker swarm leave --force) e reinicializar?" \
+      || { echo "Sem um nó manager não dá para seguir. Ajuste o Swarm e rode de novo."; exit 1; }
+    docker swarm leave --force >>"$LOG_FILE" 2>&1 || true
+  fi
+  working "docker swarm init --advertise-addr ${ip}"
+  docker swarm init --advertise-addr "$ip" >>"$LOG_FILE" 2>&1
+  ok "Swarm inicializado (este nó é o manager)"
+}
+
+# Define/atualiza uma variável no .env (substitui a linha se existir, senão adiciona).
+# Aceita valores com caracteres especiais ($ / . :) sem expandir nada.
+set_env_var() {
+  local k="$1" v="$2" tmp
+  tmp="$(mktemp)"
+  [[ -f .env ]] && { grep -v "^${k}=" .env >"$tmp" 2>/dev/null || true; }
+  printf '%s=%s\n' "$k" "$v" >>"$tmp"
+  mv "$tmp" .env
+  chmod 600 .env
 }
 
 # =============================================================================
@@ -365,18 +402,13 @@ EOF
 
   # ── Swarm + labels do node (igual ao Notion: infra=true, app=true) ──
   step "Inicializando o Docker Swarm"
-  if docker info --format '{{.Swarm.LocalNodeState}}' 2>/dev/null | grep -q active; then
-    skip "Swarm já está ativo"
+  if is_manager; then
+    skip "Swarm ativo e este nó é manager"
   else
-    local ip
-    ip="$(detect_public_ip)"
-    ip="$(ask "IP público para anunciar no Swarm (advertise-addr)" "${ip:-127.0.0.1}")"
-    working "docker swarm init --advertise-addr ${ip}"
-    docker swarm init --advertise-addr "$ip" >>"$LOG_FILE" 2>&1
-    ok "Swarm inicializado (este nó é o manager)"
+    ensure_swarm_manager
   fi
   local nodehost
-  nodehost="$(docker node ls --format '{{.Hostname}}' 2>/dev/null | head -1)"
+  nodehost="$(docker node ls --format '{{.Hostname}}' 2>/dev/null | head -n1)" || true
   if [[ -n "$nodehost" ]]; then
     docker node update --label-add infra=true "$nodehost" >>"$LOG_FILE" 2>&1 || true
     docker node update --label-add app=true   "$nodehost" >>"$LOG_FILE" 2>&1 || true
@@ -468,9 +500,10 @@ phase_deploy() {
   if ! docker info >/dev/null 2>&1; then
     echo "Sem permissão no Docker. Saia e entre de novo (newgrp docker) ou rode a FASE 1 como root."; exit 1
   fi
-  docker info --format '{{.Swarm.LocalNodeState}}' 2>/dev/null | grep -q active \
-    || { echo "Swarm não está ativo. Rode a FASE 1 como root."; exit 1; }
-  ok "Docker e Swarm OK"
+  # Exige nó MANAGER (criar rede overlay / stack / secret precisa disso).
+  # Se o Swarm estiver ausente ou inconsistente, conserta automaticamente.
+  ensure_swarm_manager
+  ok "Docker e Swarm OK (nó manager)"
 
   # ── Dados do projeto/GitHub ──
   step "Dados do projeto e do GitHub"
@@ -545,11 +578,11 @@ SSHCFG
   # Descobre convenções do projeto a partir dos arquivos clonados
   STACK_FILE="docker-stack.yml"
   [[ -f "$STACK_FILE" ]] || { echo "docker-stack.yml não encontrado no repositório."; exit 1; }
-  IMAGE="$(grep -oE 'ghcr\.io/[^:[:space:]"]+' "$STACK_FILE" | head -1)"
+  IMAGE="$(grep -oE 'ghcr\.io/[^:[:space:]"]+' "$STACK_FILE" 2>/dev/null | head -n1)" || true
   [[ -n "$IMAGE" ]] || IMAGE="ghcr.io/usuario/${PROJECT_NAME}"
   GHCR_OWNER="$(echo "$IMAGE" | cut -d/ -f2)"
   if [[ -f scripts/deploy.sh ]]; then
-    STACK_NAME="$(grep -E '^STACK_NAME=' scripts/deploy.sh | head -1 | cut -d'"' -f2)"
+    STACK_NAME="$(grep -E '^STACK_NAME=' scripts/deploy.sh 2>/dev/null | head -n1 | cut -d'"' -f2)" || true
   fi
   STACK_NAME="${STACK_NAME:-$PROJECT_NAME}"
   info "Imagem...: ${BOLD}${IMAGE}${RESET}"
@@ -646,40 +679,27 @@ SSHCFG
   fi
   docker network ls --filter driver=overlay --format 'table {{.Name}}\t{{.Driver}}\t{{.Scope}}' | sed 's/^/    /' || true
 
-  # ── Basic Auth do dashboard do Traefik (htpasswd -nbB) ──
+  # ── Basic Auth do dashboard do Traefik (htpasswd -nbB) — salvo no .env ──
   step "Gerando Basic Auth do dashboard do Traefik"
   retry apt-get -y install apache2-utils >>"$LOG_FILE" 2>&1 || sudo apt-get -y install apache2-utils >>"$LOG_FILE" 2>&1 || true
-  local dash_user dash_pass htpasswd_raw htpasswd_swarm
+  local dash_user dash_pass htpasswd_raw
   dash_user="$(ask "Usuário do dashboard do Traefik" "admin")"
   dash_pass="$(ask_secret "Senha do dashboard (ENTER para gerar uma)")"
   [[ -n "$dash_pass" ]] || { dash_pass="$(gen_secret 20)"; info "Senha gerada: ${BOLD}${dash_pass}${RESET}"; }
   htpasswd_raw="$(htpasswd -nbB "$dash_user" "$dash_pass")"
-  # No Swarm, cada '$' precisa virar '$$' dentro do label da stack
-  htpasswd_swarm="${htpasswd_raw//\$/\$\$}"
-  action_box \
-    "Cole a linha abaixo no docker-stack.yml, no label 'basicauth.users'" \
-    "do serviço traefik (substituindo o valor {HASH DA SENHA}):" \
-    "" \
-    "  ${htpasswd_swarm}" \
-    "" \
-    "Usuário: ${dash_user}   |   Senha: ${dash_pass}   (anote!)"
-  if confirm_SN "Quer que eu já atualize o docker-stack.yml com esse hash automaticamente?"; then
-    if grep -q 'basicauth.users=' "$STACK_FILE"; then
-      python3 - "$STACK_FILE" "$htpasswd_swarm" "$dash_user" <<'PY' && ok "docker-stack.yml atualizado" || warn "Não consegui editar automaticamente — cole manualmente."
-import re, sys
-path, val, user = sys.argv[1], sys.argv[2], sys.argv[3]
-s = open(path).read()
-new = re.sub(r'(traefik\.http\.middlewares\.[\w-]+\.basicauth\.users=).*',
-             lambda m: m.group(1) + user + ':' + val.split(':',1)[1] + '"', s, count=1)
-open(path,'w').write(new)
-PY
-    else
-      warn "Não achei o label basicauth.users — cole manualmente no docker-stack.yml."
-    fi
+  # Salva o hash CRU (um '$') no .env. O docker-stack.yml lê via
+  # ${TRAEFIK_DASHBOARD_AUTH} — sem precisar duplicar '$' nem editar o YAML.
+  set_env_var "TRAEFIK_DASHBOARD_AUTH" "$htpasswd_raw"
+  if grep -q 'TRAEFIK_DASHBOARD_AUTH' "$STACK_FILE" 2>/dev/null; then
+    ok "Hash salvo no .env (TRAEFIK_DASHBOARD_AUTH) — o docker-stack.yml já lê de lá"
   else
-    warn "Ok — lembre de colar o hash no docker-stack.yml antes do dashboard funcionar."
-    pause_enter
+    warn "Hash salvo no .env, MAS o docker-stack.yml não usa \${TRAEFIK_DASHBOARD_AUTH}."
+    warn "No label basicauth.users, troque o hash fixo por:  \${TRAEFIK_DASHBOARD_AUTH}"
   fi
+  action_box \
+    "Dashboard do Traefik:" \
+    "  Usuário: ${dash_user}" \
+    "  Senha..: ${dash_pass}   (ANOTE — não será mostrada de novo)"
 
   # ── Secret da Cloudflare (TLS via DNS-01) ──
   step "Criando o secret da Cloudflare (TLS wildcard via DNS-01)"
@@ -706,7 +726,7 @@ PY
   # ── DNS do domínio (pré-requisito para o TLS funcionar) ──
   step "Conferindo o DNS do domínio"
   local DOMAIN VPS_IP resolved
-  DOMAIN="$(grep -E '^DOMAIN=' .env 2>/dev/null | cut -d= -f2- | tr -d '[:space:]')"
+  DOMAIN="$(grep -E '^DOMAIN=' .env 2>/dev/null | cut -d= -f2- | tr -d '[:space:]')" || true
   VPS_IP="$(detect_public_ip)"
   if [[ -z "$DOMAIN" ]]; then
     warn "Não encontrei DOMAIN no .env — pulando a verificação de DNS."
@@ -723,7 +743,7 @@ PY
       "  A   ${DOMAIN}                 ->  ${VPS_IP:-IP_DA_VPS}" \
       "  A   *.${DOMAIN}  (wildcard)   ->  ${VPS_IP:-IP_DA_VPS}" \
       "  (o proxy laranja da Cloudflare pode ficar ATIVO — o TLS é via DNS-01)"
-    resolved="$(getent hosts "$DOMAIN" 2>/dev/null | awk '{print $1}' | head -1)"
+    resolved="$(getent hosts "$DOMAIN" 2>/dev/null | awk '{print $1}' | head -n1)" || true
     if [[ -n "$resolved" ]]; then
       info "Agora ${DOMAIN} resolve para: ${resolved} (com proxy Cloudflare, será um IP da Cloudflare)"
     else
@@ -780,7 +800,7 @@ PY
   step "Populando dados de demonstração (seed_demo --force)"
   local app_cid=""
   for _ in 1 2 3 4 5 6; do
-    app_cid="$(docker ps --filter "name=${STACK_NAME}_app" -q | head -1)"
+    app_cid="$(docker ps --filter "name=${STACK_NAME}_app" -q | head -n1)" || true
     [[ -n "$app_cid" ]] && break
     sleep 5
   done
@@ -800,7 +820,7 @@ PY
 
 print_final_instructions() {
   local domain
-  domain="$(grep -E '^DOMAIN=' .env 2>/dev/null | cut -d= -f2-)"
+  domain="$(grep -E '^DOMAIN=' .env 2>/dev/null | cut -d= -f2-)" || true
   banner "✅  DEPLOY CONCLUÍDO!"
   echo "  Seu sistema está no ar (pode levar alguns minutos para o TLS validar)."
   echo ""

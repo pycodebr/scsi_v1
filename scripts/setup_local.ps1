@@ -38,6 +38,18 @@
 param()
 
 $ErrorActionPreference = 'Stop'
+
+# Libera a execução de scripts .ps1 APENAS nesta sessão (escopo Process: não pede
+# admin e não altera nada permanente no sistema). É necessário porque o 'npm' no
+# Windows é um 'npm.ps1' e, com a ExecutionPolicy padrão (Restricted), comandos
+# como 'npm --version' / 'npm install -g' (e os shims claude/opencode/codex) seriam
+# bloqueados com "a execução de scripts foi desabilitada neste sistema".
+try { Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force } catch {}
+
+# Evita que o pip escreva o aviso "A new release of pip..." no stderr — que, com
+# ErrorActionPreference='Stop', seria interpretado como erro fatal pelo PowerShell.
+$env:PIP_DISABLE_PIP_VERSION_CHECK = '1'
+
 $script:LogFile   = Join-Path (Get-Location) 'setup_local.log'
 $script:Step      = 0
 $script:TotalStep = 10
@@ -106,6 +118,20 @@ function Stop-OnError { param([System.Management.Automation.ErrorRecord]$Err)
 #  Utilitários
 # ─────────────────────────────────────────────────────────────────────────────
 function Test-Cmd { param([string]$Name) [bool](Get-Command $Name -ErrorAction SilentlyContinue) }
+
+# Testa se um módulo Python está instalado SEM disparar erro fatal. Quando o módulo
+# NÃO existe, o "import" joga um traceback no stderr; com ErrorActionPreference='Stop'
+# isso viraria erro fatal (e o '2>$null' não suprime no PowerShell 5.1). Por isso
+# baixamos o ErrorActionPreference só aqui e checamos o código de saída.
+function Test-PyModule {
+  param([string]$Module)
+  $prev = $ErrorActionPreference
+  $ErrorActionPreference = 'SilentlyContinue'
+  try {
+    & python -c "import $Module" 2>$null | Out-Null
+    return ($LASTEXITCODE -eq 0)
+  } finally { $ErrorActionPreference = $prev }
+}
 
 function Update-Path {
   # Recarrega o PATH (Máquina + Usuário) para enxergar o que acabou de ser instalado
@@ -343,8 +369,7 @@ Working "Atualizando pip"
 Invoke-Retry { python -m pip install --upgrade pip 2>&1 | Add-Content $script:LogFile } | Out-Null
 Ok "pip atualizado"
 
-python -c "import django" 2>$null
-if ($LASTEXITCODE -eq 0) {
+if (Test-PyModule 'django') {
   Skip "Django ($(python -c 'import django; print(django.get_version())'))"
 } else {
   Working "Instalando Django"
@@ -361,7 +386,9 @@ if (Test-Path "manage.py") {
 }
 
 Working "Gerando requirements.txt (pip freeze)"
-pip freeze | Out-File -Encoding utf8 requirements.txt
+$prevEAP = $ErrorActionPreference; $ErrorActionPreference = 'SilentlyContinue'
+pip freeze 2>$null | Out-File -Encoding utf8 requirements.txt
+$ErrorActionPreference = $prevEAP
 Ok "requirements.txt gerado"
 
 # =============================================================================
