@@ -68,6 +68,17 @@ function Skip    { param([string]$m) Write-Host "  -  $m (ja instalado - pulando
 function Working { param([string]$m) Write-Host "  .. $m..." -ForegroundColor Cyan; Write-Log "WORK  $m" }
 
 # ─────────────────────────────────────────────────────────────────────────────
+#  Saída segura — PAUSA antes de sair para a janela NÃO fechar e sumir o erro
+# ─────────────────────────────────────────────────────────────────────────────
+function Wait-Key {
+  # Só pausa se houver interface interativa (não trava em automação/CI).
+  if ([Environment]::UserInteractive) {
+    try { Read-Host "`n  >> Pressione ENTER para fechar esta janela" | Out-Null } catch {}
+  }
+}
+function Exit-Script { param([int]$Code = 0) Wait-Key; exit $Code }
+
+# ─────────────────────────────────────────────────────────────────────────────
 #  Tratamento de erros
 # ─────────────────────────────────────────────────────────────────────────────
 function Stop-OnError { param([System.Management.Automation.ErrorRecord]$Err)
@@ -87,6 +98,7 @@ function Stop-OnError { param([System.Management.Automation.ErrorRecord]$Err)
   Write-Host ""
   Write-Log  "ERRO: $($Err.Exception.Message) | linha $($Err.InvocationInfo.ScriptLineNumber)"
   Write-Log  ($Err | Out-String)
+  Wait-Key            # pausa para o usuario LER o erro antes da janela fechar
   exit 1
 }
 
@@ -150,7 +162,7 @@ $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIden
 if (-not $isAdmin) {
   Warn "Este script PRECISA ser executado como Administrador."
   Write-Host "  Feche esta janela, abra o PowerShell com 'Executar como administrador' e rode de novo."
-  exit 1
+  Exit-Script 1
 }
 Ok "Rodando como Administrador"
 
@@ -160,7 +172,7 @@ if (Test-Cmd winget) {
 } else {
   Warn "winget nao encontrado. Instale o 'App Installer' pela Microsoft Store e rode de novo:"
   Write-Host "    https://apps.microsoft.com/detail/9NBLGGH4NNS1"
-  exit 1
+  Exit-Script 1
 }
 
 # =============================================================================
@@ -295,7 +307,7 @@ if (Test-Path $ProjectDir) {
     Ok "Ok, continuando na pasta existente."
   } else {
     Info "Operacao cancelada. Rode o script de novo com outro caminho/nome."
-    exit 0
+    Exit-Script 0
   }
 } else {
   Working "Criando $ProjectDir"
@@ -434,3 +446,4 @@ Write-Host "    5. Abra seu CLI de IA na pasta: claude (ou opencode / codex)"
 Write-Host ""
 Warn "Se voce acabou de habilitar o WSL2/Docker, talvez precise REINICIAR o Windows."
 Write-Log "CONCLUIDO com sucesso — projeto em $ProjectDir"
+Wait-Key   # mantem a janela aberta para o usuario ler o resumo

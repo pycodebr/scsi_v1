@@ -102,6 +102,10 @@ on_error() {
   echo "    4. Se persistir, copie o log e peça ajuda ao seu CLI de IA."
   echo ""
   _logfile "ERRO exit=$exit_code line=$line cmd=<$cmd> step=$CURRENT_STEP/$TOTAL_STEPS"
+  # Pausa para o usuário ler o erro (não trava se não houver terminal).
+  if [[ -e /dev/tty ]]; then
+    read -r -p "  Pressione ENTER para fechar..." _ </dev/tty 2>/dev/null || true
+  fi
   exit "$exit_code"
 }
 trap 'on_error $? ${LINENO} "$BASH_COMMAND"' ERR
