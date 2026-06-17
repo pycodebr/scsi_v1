@@ -31,8 +31,8 @@ services:
 
       # Certificado wildcard (emitido 1x, cobre todos os subdomínios)
       - "--entrypoints.websecure.http.tls.certresolver=letsencrypt"
-      - "--entrypoints.websecure.http.tls.domains[0].main=scsi.digital"
-      - "--entrypoints.websecure.http.tls.domains[0].sans=*.scsi.digital"
+      - "--entrypoints.websecure.http.tls.domains[0].main=${DOMAIN:-scsi.digital}"
+      - "--entrypoints.websecure.http.tls.domains[0].sans=*.${DOMAIN:-scsi.digital}"
 
       # Logs
       - "--log.level=INFO"
@@ -70,7 +70,7 @@ services:
       labels:
         # Dashboard
         - "traefik.enable=true"
-        - "traefik.http.routers.traefik-dashboard.rule=Host(`traefik.scsi.digital`)"
+        - "traefik.http.routers.traefik-dashboard.rule=Host(`traefik.${DOMAIN:-scsi.digital}`)"
         - "traefik.http.routers.traefik-dashboard.entrypoints=websecure"
         - "traefik.http.routers.traefik-dashboard.tls.certresolver=letsencrypt"
         - "traefik.http.routers.traefik-dashboard.service=api@internal"
