@@ -2,7 +2,7 @@
 # =============================================================================
 #  setup_local.sh  —  Setup de ambiente de desenvolvimento (Linux e macOS)
 # =============================================================================
-#  Imersão IA Builders — workflow de IA Assistida (SCSI e qualquer outro projeto)
+#  PycodeBR — workflow de IA Assistida (SCSI e qualquer outro projeto)
 #
 #  O QUE ESTE SCRIPT FAZ (de forma idempotente — pula o que já está instalado):
 #    1. Detecta seu sistema operacional e gerenciador de pacotes
@@ -14,10 +14,12 @@
 #         - OpenCode     (opencode-ai)
 #         - Codex CLI    (@openai/codex)
 #    6. Instala ferramentas de apoio (git, curl, etc.)
-#    7. Cria a pasta do SEU projeto (pergunta onde e qual nome)
-#    8. Cria a .venv, instala Django, roda `django-admin startproject core .`
-#       e gera o requirements.txt
-#    9. Cria um arquivo .env com as variáveis mais usadas (em branco)
+#    7. Instala o GitHub CLI (gh) e autentica você no GitHub
+#    8. Cria a pasta do SEU projeto (pergunta onde e qual nome)
+#    9. Cria a .venv, instala Django, roda `django-admin startproject core .`,
+#       gera o requirements.txt e o .gitignore
+#   10. Cria um arquivo .env com as variáveis mais usadas (em branco)
+#   11. (Opcional) Cria o repositório no GitHub e faz o "first commit" (gh)
 #
 #  USO:
 #    bash scripts/setup_local.sh
@@ -40,7 +42,7 @@ if [[ ! -t 0 && -e /dev/tty ]]; then exec </dev/tty; fi
 readonly PYTHON_TARGET="3.13"            # versão alvo do Python
 readonly SCRIPT_NAME="$(basename "$0")"
 readonly LOG_FILE="$(pwd)/setup_local.log"
-TOTAL_STEPS=9
+TOTAL_STEPS=11
 CURRENT_STEP=0
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -214,7 +216,7 @@ pkg_install() {
 #  ETAPA 0 — Boas-vindas + pré-requisitos
 # =============================================================================
 : >"$LOG_FILE"   # zera o log desta execução
-banner "🚀  SETUP DE AMBIENTE — Imersão IA Builders"
+banner "🚀  SETUP DE AMBIENTE — PycodeBR"
 echo "  Este script prepara tudo que você precisa para desenvolver."
 echo "  Ele é ${BOLD}seguro${RESET} e ${BOLD}idempotente${RESET}: pode rodar quantas vezes quiser."
 echo "  Log completo desta execução: ${GREY}${LOG_FILE}${RESET}"
@@ -411,7 +413,67 @@ else
 fi
 
 # =============================================================================
-#  ETAPA 5 — Coleta dos dados do projeto (onde e qual nome)
+#  ETAPA 5 — GitHub CLI (gh) + autenticação no GitHub
+# =============================================================================
+step "GitHub CLI (gh) + autenticação no GitHub"
+
+# Instala o gh — a CLI oficial do GitHub (para criar/enviar repositórios)
+install_gh() {
+  if have gh; then skip "GitHub CLI (gh)"; return 0; fi
+  working "Instalando GitHub CLI (gh)"
+  case "$PKG" in
+    brew)
+      pkg_install gh
+      ;;
+    apt)
+      if apt-cache show gh >/dev/null 2>&1; then
+        pkg_install gh
+      else
+        # Repositório oficial do GitHub CLI (https://cli.github.com)
+        retry bash -c "curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | $SUDO dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg" >>"$LOG_FILE" 2>&1
+        $SUDO chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg >>"$LOG_FILE" 2>&1 || true
+        echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+          | $SUDO tee /etc/apt/sources.list.d/github-cli.list >/dev/null
+        PKG_UPDATED=0; pkg_update_once
+        pkg_install gh
+      fi
+      ;;
+    dnf)
+      pkg_install gh || {
+        retry $SUDO dnf config-manager --add-repo https://cli.github.com/packages/rpm/gh-cli.repo >>"$LOG_FILE" 2>&1 || true
+        pkg_install gh
+      }
+      ;;
+    pacman)
+      pkg_install github-cli
+      ;;
+    zypper)
+      pkg_install gh || true
+      ;;
+  esac
+  if have gh; then
+    ok "GitHub CLI instalado ($(gh --version | head -1))"
+  else
+    warn "Não consegui instalar o gh automaticamente. Instale depois: https://cli.github.com"
+  fi
+}
+install_gh
+
+# Autentica você no GitHub (interativo) — pula se já estiver autenticado
+if have gh; then
+  if gh auth status >/dev/null 2>&1; then
+    skip "Autenticação no GitHub (gh já autenticado)"
+  else
+    info "Vamos autenticar você no GitHub agora (necessário para enviar o projeto)."
+    info "Dica: escolha ${BOLD}GitHub.com${RESET} → ${BOLD}HTTPS${RESET} → autenticar pelo ${BOLD}navegador${RESET}."
+    gh auth login || warn "Autenticação não concluída. Você pode rodar 'gh auth login' depois."
+  fi
+else
+  warn "gh indisponível — a autenticação no GitHub será pulada."
+fi
+
+# =============================================================================
+#  ETAPA 6 — Coleta dos dados do projeto (onde e qual nome)
 # =============================================================================
 step "Dados do seu projeto"
 
@@ -446,7 +508,7 @@ PROJECT_DIR="${BASE_DIR%/}/${PROJECT_NAME}"
 info "Caminho do projeto: ${BOLD}${PROJECT_DIR}${RESET}"
 
 # =============================================================================
-#  ETAPA 6 — Criação da pasta (com checagem de pasta existente)
+#  ETAPA 7 — Criação da pasta (com checagem de pasta existente)
 # =============================================================================
 step "Criando a pasta do projeto"
 
@@ -469,7 +531,7 @@ fi
 cd "$PROJECT_DIR"
 
 # =============================================================================
-#  ETAPA 7 — .venv + Django + startproject core . + requirements.txt
+#  ETAPA 8 — .venv + Django + startproject core . + requirements.txt + .gitignore
 # =============================================================================
 step "Ambiente Python do projeto (.venv + Django)"
 
@@ -513,8 +575,196 @@ working "Gerando requirements.txt (pip freeze)"
 pip freeze >requirements.txt
 ok "requirements.txt gerado ($(wc -l <requirements.txt | tr -d ' ') pacotes)"
 
+# Cria o .gitignore do projeto (mesmo conteúdo do projeto SCSI v1)
+if [[ -f ".gitignore" ]]; then
+  skip ".gitignore já existe (não foi sobrescrito)"
+else
+  working "Criando .gitignore"
+  cat >.gitignore <<'GITEOF'
+# Created by https://www.toptal.com/developers/gitignore/api/django
+# Edit at https://www.toptal.com/developers/gitignore?templates=django
+
+### Django ###
+*.log
+*.pot
+*.pyc
+__pycache__/
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+media
+
+# If your build process includes running collectstatic, then you probably don't need or want to include staticfiles/
+# in your Git repository. Update and uncomment the following line accordingly.
+# <django-project-name>/staticfiles/
+
+### Django.Python Stack ###
+# Byte-compiled / optimized / DLL files
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+#  Usually these files are written by a python script from a template
+#  before PyInstaller builds the exe, so as to inject date/other infos into it.
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
+
+# Translations
+*.mo
+
+# Django stuff:
+
+# Flask stuff:
+instance/
+.webassets-cache
+
+# Scrapy stuff:
+.scrapy
+
+# Sphinx documentation
+docs/_build/
+
+# PyBuilder
+.pybuilder/
+target/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IPython
+profile_default/
+ipython_config.py
+
+# pyenv
+#   For a library or package, you might want to ignore these files since the code is
+#   intended to run in multiple environments; otherwise, check them in:
+# .python-version
+
+# pipenv
+#   According to pypa/pipenv#598, it is recommended to include Pipfile.lock in version control.
+#   However, in case of collaboration, if having platform-specific dependencies or dependencies
+#   having no cross-platform support, pipenv may install dependencies that don't work, or not
+#   install all needed dependencies.
+#Pipfile.lock
+
+# poetry
+#   Similar to Pipfile.lock, it is generally recommended to include poetry.lock in version control.
+#   This is especially recommended for binary packages to ensure reproducibility, and is more
+#   commonly ignored for libraries.
+#   https://python-poetry.org/docs/basic-usage/#commit-your-poetrylock-file-to-version-control
+#poetry.lock
+
+# pdm
+#   Similar to Pipfile.lock, it is generally recommended to include pdm.lock in version control.
+#pdm.lock
+#   pdm stores project-wide configurations in .pdm.toml, but it is recommended to not include it
+#   in version control.
+#   https://pdm.fming.dev/#use-with-ide
+.pdm.toml
+
+# PEP 582; used by e.g. github.com/David-OConnor/pyflow and github.com/pdm-project/pdm
+__pypackages__/
+
+# Celery stuff
+celerybeat-schedule
+celerybeat.pid
+
+# SageMath parsed files
+*.sage.py
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# pytype static type analyzer
+.pytype/
+
+# Cython debug symbols
+cython_debug/
+
+# PyCharm
+#  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
+#  be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore
+#  and can be added to the global gitignore or merged into this file.  For a more nuclear
+#  option (not recommended) you can uncomment the following to ignore the entire idea folder.
+#.idea/
+
+# End of https://www.toptal.com/developers/gitignore/api/django
+.claude
+.DS_Store
+site/
+staticfiles/
+GITEOF
+  ok ".gitignore criado (mesmo padrão do projeto SCSI v1)"
+fi
+
 # =============================================================================
-#  ETAPA 8 — Arquivo .env com as variáveis mais usadas (em branco)
+#  ETAPA 9 — Arquivo .env com as variáveis mais usadas (em branco)
 # =============================================================================
 step "Arquivo .env (variáveis de ambiente)"
 
@@ -569,18 +819,62 @@ ENVEOF
   ok ".env criado (variáveis em branco, prontas para preencher)"
 fi
 
-# Cria um .gitignore mínimo se o projeto ainda não tiver (protege .venv e .env)
-if [[ ! -f ".gitignore" ]]; then
-  cat >.gitignore <<'GITEOF'
-.venv/
-__pycache__/
-*.pyc
-.env
-db.sqlite3
-staticfiles/
-media/
-GITEOF
-  ok ".gitignore criado (protege .venv, .env e db.sqlite3)"
+# =============================================================================
+#  ETAPA 11 — Enviar o projeto para o GitHub (opcional)
+# =============================================================================
+step "Enviar o projeto para o GitHub (opcional)"
+
+if ! have gh; then
+  warn "gh não está disponível — pulando o envio ao GitHub."
+  warn "Instale em https://cli.github.com e depois rode 'gh repo create' na pasta."
+elif ! gh auth status >/dev/null 2>&1; then
+  warn "Você não está autenticado no GitHub. Pulando o envio."
+  warn "Rode 'gh auth login' e depois 'gh repo create' dentro da pasta do projeto."
+elif confirm_SN "Deseja enviar este projeto para o GitHub agora?"; then
+  # Nome do repositório — sugere o nome da pasta do projeto como padrão
+  read -r -p "  ${CYAN}🏷  Nome do repositório no GitHub${RESET} [${PROJECT_NAME}]: " REPO_NAME || true
+  REPO_NAME="${REPO_NAME:-$PROJECT_NAME}"
+
+  # Visibilidade: público ou privado
+  if confirm_SN "O repositório deve ser PÚBLICO? (responda N para PRIVADO)"; then
+    VISIBILITY="--public"
+  else
+    VISIBILITY="--private"
+  fi
+
+  have git || pkg_install git
+
+  # Inicializa o repositório git (se ainda não houver)
+  if [[ ! -d .git ]]; then
+    working "Inicializando repositório git"
+    git init -b main >>"$LOG_FILE" 2>&1 || git init >>"$LOG_FILE" 2>&1
+  fi
+
+  # Garante uma identidade git (usa os dados da sua conta do GitHub se faltar)
+  if [[ -z "$(git config user.email 2>/dev/null)" && -z "$(git config --global user.email 2>/dev/null)" ]]; then
+    gh_login="$(gh api user --jq .login 2>/dev/null || true)"
+    gh_name="$(gh api user --jq '.name // .login' 2>/dev/null || true)"
+    if [[ -n "$gh_login" ]]; then
+      git config user.name  "${gh_name:-$gh_login}"
+      git config user.email "${gh_login}@users.noreply.github.com"
+    fi
+  fi
+
+  working "Criando o primeiro commit (\"first commit\")"
+  git add -A
+  git commit -m "first commit" >>"$LOG_FILE" 2>&1 || warn "Nada novo para commitar."
+
+  working "Criando o repositório no GitHub e enviando (gh repo create)"
+  if gh repo create "$REPO_NAME" $VISIBILITY --source=. --remote=origin --push >>"$LOG_FILE" 2>&1; then
+    REPO_URL="$(gh repo view "$REPO_NAME" --json url --jq .url 2>/dev/null || true)"
+    ok "Projeto enviado ao GitHub${REPO_URL:+: $REPO_URL}"
+  else
+    warn "Não consegui criar/enviar o repositório. Veja o ${LOG_FILE}."
+    warn "Talvez o nome '$REPO_NAME' já exista na sua conta — tente outro com 'gh repo create'."
+  fi
+else
+  info "Ok! O projeto não foi enviado ao GitHub."
+  info "Quando quiser, dentro da pasta rode: ${CYAN}gh repo create${RESET}."
 fi
 
 # =============================================================================

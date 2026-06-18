@@ -2,7 +2,7 @@
 =============================================================================
  setup_local.ps1  —  Setup de ambiente de desenvolvimento (Windows 10/11)
 =============================================================================
- Imersão IA Builders — workflow de IA Assistida (SCSI e qualquer outro projeto)
+ PycodeBR — workflow de IA Assistida (SCSI e qualquer outro projeto)
 
  O QUE ESTE SCRIPT FAZ (idempotente — pula o que já está instalado):
    1. Verifica/instala o gerenciador de pacotes do Windows (winget)
@@ -15,10 +15,12 @@
         - OpenCode     (opencode-ai)
         - Codex CLI    (@openai/codex)
    7. Instala git e ferramentas de apoio
-   8. Cria a pasta do SEU projeto (pergunta onde e qual nome)
-   9. Cria a .venv, instala Django, roda 'django-admin startproject core .'
-      e gera o requirements.txt
-  10. Cria um arquivo .env com as variáveis mais usadas (em branco)
+   8. Instala o GitHub CLI (gh) e autentica voce no GitHub
+   9. Cria a pasta do SEU projeto (pergunta onde e qual nome)
+  10. Cria a .venv, instala Django, roda 'django-admin startproject core .',
+      gera o requirements.txt e o .gitignore
+  11. Cria um arquivo .env com as variáveis mais usadas (em branco)
+  12. (Opcional) Cria o repositorio no GitHub e faz o "first commit" (gh)
 
  COMO RODAR (PowerShell COMO ADMINISTRADOR):
    1. Abra o menu Iniciar, digite "PowerShell"
@@ -52,7 +54,7 @@ $env:PIP_DISABLE_PIP_VERSION_CHECK = '1'
 
 $script:LogFile   = Join-Path (Get-Location) 'setup_local.log'
 $script:Step      = 0
-$script:TotalStep = 10
+$script:TotalStep = 12
 Set-Content -Path $script:LogFile -Value "[$(Get-Date -Format HH:mm:ss)] Início do setup" -Encoding utf8
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -175,7 +177,7 @@ trap { Stop-OnError $_ }
 # =============================================================================
 #  ETAPA 0 — Boas-vindas + checagens
 # =============================================================================
-Show-Banner "SETUP DE AMBIENTE — Imersao IA Builders (Windows)"
+Show-Banner "SETUP DE AMBIENTE — PycodeBR (Windows)"
 Write-Host "  Este script prepara tudo que voce precisa para desenvolver."
 Write-Host "  Ele e seguro e idempotente: pode rodar quantas vezes quiser."
 Write-Host "  Log completo desta execucao: $($script:LogFile)" -ForegroundColor DarkGray
@@ -300,7 +302,30 @@ if (Test-Cmd npm) {
 }
 
 # =============================================================================
-#  ETAPA 7 — Dados do projeto (onde e qual nome)
+#  ETAPA 7 — GitHub CLI (gh) + autenticacao no GitHub
+# =============================================================================
+Show-Step "GitHub CLI (gh) + autenticacao no GitHub"
+
+# Instala o gh (CLI oficial do GitHub) via winget, de forma idempotente
+Install-Winget -Id 'GitHub.cli' -CheckCmd 'gh' -Label 'GitHub CLI (gh)'
+
+# Autentica voce no GitHub (interativo) — pula se ja estiver autenticado
+if (Test-Cmd gh) {
+  $ghAuthed = $false
+  try { gh auth status *> $null; if ($LASTEXITCODE -eq 0) { $ghAuthed = $true } } catch {}
+  if ($ghAuthed) {
+    Skip "Autenticacao no GitHub (gh ja autenticado)"
+  } else {
+    Info "Vamos autenticar voce no GitHub agora (necessario para enviar o projeto)."
+    Info "Dica: escolha GitHub.com > HTTPS > autenticar pelo navegador."
+    try { gh auth login } catch { Warn "Autenticacao nao concluida. Rode 'gh auth login' depois." }
+  }
+} else {
+  Warn "gh indisponivel — a autenticacao no GitHub sera pulada."
+}
+
+# =============================================================================
+#  ETAPA 8 — Dados do projeto (onde e qual nome)
 # =============================================================================
 Show-Step "Dados do seu projeto"
 Write-Host "  Agora vamos criar a pasta do seu projeto."
@@ -321,7 +346,7 @@ $ProjectDir = Join-Path $BaseDir $ProjectName
 Info "Caminho do projeto: $ProjectDir"
 
 # =============================================================================
-#  ETAPA 8 — Criação da pasta (com checagem de pasta existente)
+#  ETAPA 9 — Criação da pasta (com checagem de pasta existente)
 # =============================================================================
 Show-Step "Criando a pasta do projeto"
 if (Test-Path $ProjectDir) {
@@ -343,7 +368,7 @@ if (Test-Path $ProjectDir) {
 Set-Location $ProjectDir
 
 # =============================================================================
-#  ETAPA 9 — .venv + Django + startproject + requirements.txt
+#  ETAPA 10 — .venv + Django + startproject + requirements.txt + .gitignore
 # =============================================================================
 Show-Step "Ambiente Python do projeto (.venv + Django)"
 
@@ -391,8 +416,197 @@ pip freeze 2>$null | Out-File -Encoding utf8 requirements.txt
 $ErrorActionPreference = $prevEAP
 Ok "requirements.txt gerado"
 
+# Cria o .gitignore do projeto (mesmo conteudo do projeto SCSI v1)
+if (Test-Path ".gitignore") {
+  Skip ".gitignore ja existe (nao foi sobrescrito)"
+} else {
+  Working "Criando .gitignore"
+  $gitignoreContent = @'
+# Created by https://www.toptal.com/developers/gitignore/api/django
+# Edit at https://www.toptal.com/developers/gitignore?templates=django
+
+### Django ###
+*.log
+*.pot
+*.pyc
+__pycache__/
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+media
+
+# If your build process includes running collectstatic, then you probably don't need or want to include staticfiles/
+# in your Git repository. Update and uncomment the following line accordingly.
+# <django-project-name>/staticfiles/
+
+### Django.Python Stack ###
+# Byte-compiled / optimized / DLL files
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+#  Usually these files are written by a python script from a template
+#  before PyInstaller builds the exe, so as to inject date/other infos into it.
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
+
+# Translations
+*.mo
+
+# Django stuff:
+
+# Flask stuff:
+instance/
+.webassets-cache
+
+# Scrapy stuff:
+.scrapy
+
+# Sphinx documentation
+docs/_build/
+
+# PyBuilder
+.pybuilder/
+target/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IPython
+profile_default/
+ipython_config.py
+
+# pyenv
+#   For a library or package, you might want to ignore these files since the code is
+#   intended to run in multiple environments; otherwise, check them in:
+# .python-version
+
+# pipenv
+#   According to pypa/pipenv#598, it is recommended to include Pipfile.lock in version control.
+#   However, in case of collaboration, if having platform-specific dependencies or dependencies
+#   having no cross-platform support, pipenv may install dependencies that don't work, or not
+#   install all needed dependencies.
+#Pipfile.lock
+
+# poetry
+#   Similar to Pipfile.lock, it is generally recommended to include poetry.lock in version control.
+#   This is especially recommended for binary packages to ensure reproducibility, and is more
+#   commonly ignored for libraries.
+#   https://python-poetry.org/docs/basic-usage/#commit-your-poetrylock-file-to-version-control
+#poetry.lock
+
+# pdm
+#   Similar to Pipfile.lock, it is generally recommended to include pdm.lock in version control.
+#pdm.lock
+#   pdm stores project-wide configurations in .pdm.toml, but it is recommended to not include it
+#   in version control.
+#   https://pdm.fming.dev/#use-with-ide
+.pdm.toml
+
+# PEP 582; used by e.g. github.com/David-OConnor/pyflow and github.com/pdm-project/pdm
+__pypackages__/
+
+# Celery stuff
+celerybeat-schedule
+celerybeat.pid
+
+# SageMath parsed files
+*.sage.py
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# pytype static type analyzer
+.pytype/
+
+# Cython debug symbols
+cython_debug/
+
+# PyCharm
+#  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
+#  be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore
+#  and can be added to the global gitignore or merged into this file.  For a more nuclear
+#  option (not recommended) you can uncomment the following to ignore the entire idea folder.
+#.idea/
+
+# End of https://www.toptal.com/developers/gitignore/api/django
+.claude
+.DS_Store
+site/
+staticfiles/
+'@
+  Set-Content -Path ".gitignore" -Value $gitignoreContent -Encoding utf8
+  Ok ".gitignore criado (mesmo padrao do projeto SCSI v1)"
+}
+
 # =============================================================================
-#  ETAPA 10 — .env com as variáveis mais usadas (em branco)
+#  ETAPA 11 — .env com as variáveis mais usadas (em branco)
 # =============================================================================
 Show-Step "Arquivo .env (variaveis de ambiente)"
 if (Test-Path ".env") {
@@ -447,9 +661,66 @@ EMAIL_HOST_PASSWORD=
   Ok ".env criado (variaveis em branco, prontas para preencher)"
 }
 
-if (-not (Test-Path ".gitignore")) {
-  Set-Content -Path ".gitignore" -Value ".venv/`n__pycache__/`n*.pyc`n.env`ndb.sqlite3`nstaticfiles/`nmedia/" -Encoding utf8
-  Ok ".gitignore criado (protege .venv, .env e db.sqlite3)"
+# =============================================================================
+#  ETAPA 12 — Enviar o projeto para o GitHub (opcional)
+# =============================================================================
+Show-Step "Enviar o projeto para o GitHub (opcional)"
+
+$ghReady = $false
+if (Test-Cmd gh) { try { gh auth status *> $null; if ($LASTEXITCODE -eq 0) { $ghReady = $true } } catch {} }
+
+if (-not (Test-Cmd gh)) {
+  Warn "gh nao esta disponivel — pulando o envio ao GitHub."
+  Warn "Instale em https://cli.github.com e depois rode 'gh repo create' na pasta."
+} elseif (-not $ghReady) {
+  Warn "Voce nao esta autenticado no GitHub. Pulando o envio."
+  Warn "Rode 'gh auth login' e depois 'gh repo create' dentro da pasta do projeto."
+} elseif (Confirm-SN "Deseja enviar este projeto para o GitHub agora?") {
+  # Nome do repositorio — sugere o nome da pasta do projeto como padrao
+  $RepoName = Read-Host "  ? Nome do repositorio no GitHub [$ProjectName]"
+  if ([string]::IsNullOrWhiteSpace($RepoName)) { $RepoName = $ProjectName }
+
+  # Visibilidade: publico ou privado
+  if (Confirm-SN "O repositorio deve ser PUBLICO? (responda N para PRIVADO)") {
+    $Visibility = '--public'
+  } else {
+    $Visibility = '--private'
+  }
+
+  # Inicializa o repositorio git (se ainda nao houver)
+  if (-not (Test-Path ".git")) {
+    Working "Inicializando repositorio git"
+    git init -b main 2>&1 | Add-Content $script:LogFile
+  }
+
+  # Garante uma identidade git (usa os dados da sua conta do GitHub se faltar)
+  $hasEmail = $false
+  try { if (git config user.email)          { $hasEmail = $true } } catch {}
+  if (-not $hasEmail) { try { if (git config --global user.email) { $hasEmail = $true } } catch {} }
+  if (-not $hasEmail) {
+    $ghLogin = (gh api user --jq .login 2>$null)
+    $ghName  = (gh api user --jq '.name // .login' 2>$null)
+    if ($ghLogin) {
+      git config user.name  "$ghName"
+      git config user.email "$ghLogin@users.noreply.github.com"
+    }
+  }
+
+  Working "Criando o primeiro commit ('first commit')"
+  git add -A 2>&1 | Add-Content $script:LogFile
+  git commit -m "first commit" 2>&1 | Add-Content $script:LogFile
+
+  Working "Criando o repositorio no GitHub e enviando (gh repo create)"
+  gh repo create $RepoName $Visibility --source=. --remote=origin --push 2>&1 | Add-Content $script:LogFile
+  if ($LASTEXITCODE -eq 0) {
+    Ok "Projeto enviado ao GitHub"
+  } else {
+    Warn "Nao consegui criar/enviar o repositorio. Veja o log: $($script:LogFile)"
+    Warn "Talvez o nome '$RepoName' ja exista na sua conta — tente outro com 'gh repo create'."
+  }
+} else {
+  Info "Ok! O projeto nao foi enviado ao GitHub."
+  Info "Quando quiser, dentro da pasta rode: gh repo create"
 }
 
 # =============================================================================

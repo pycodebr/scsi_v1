@@ -1,4 +1,4 @@
-# Scripts de Setup — Imersão IA Builders
+# Scripts de Setup — PycodeBR
 
 Scripts que preparam **do zero** a máquina do aluno para desenvolver com o workflow de
 IA Assistida (stack Python 3.13 + Django + Docker + CLIs de IA). São **genéricos**:
@@ -9,15 +9,19 @@ em cada etapa e **tratamento de erro** com motivo, linha e log completo.
 
 | Objetivo                | Script             | Onde roda | Como rodar |
 |-------------------------|--------------------|-----------|------------|
-| **Máquina local** (Linux/macOS) | `setup_local.sh`  | Seu PC    | `bash scripts/setup_local.sh` |
-| **Máquina local** (Windows)     | `setup_local.ps1` | Seu PC    | PowerShell **como Administrador** (ver abaixo) |
-| **VPS + Deploy completo**       | `setup_deploy.sh` | Servidor  | `bash setup_deploy.sh` (logado como **root**) |
+| **Máquina local** (Linux/macOS) | `setup_local.sh`  | Seu PC    | `curl -fsSL https://pycodebr.com.br/setup_local.sh -o setup_local.sh && bash setup_local.sh` |
+| **Máquina local** (Windows)     | `setup_local.ps1` | Seu PC    | `irm https://pycodebr.com.br/setup_local.ps1 \| iex` (PowerShell **Admin**) |
+| **VPS + Deploy completo**       | `setup_deploy.sh` | Servidor  | `curl -fsSL https://pycodebr.com.br/setup_deploy.sh -o setup_deploy.sh && sudo bash setup_deploy.sh` (como **root**) |
 
 O que cada script instala (se faltar): Python 3.13 + venv, Node.js + npm/npx,
-Docker + Compose, **Claude Code**, **OpenCode** e **Codex CLI**, git/curl. Depois ele
+Docker + Compose, **Claude Code**, **OpenCode** e **Codex CLI**, git/curl e o
+**GitHub CLI (`gh`)** — e já **autentica você no GitHub** (`gh auth login`). Depois ele
 **pergunta onde** criar o projeto e **qual o nome**, cria a pasta, monta a `.venv`,
-instala o Django, roda `django-admin startproject core .`, gera o `requirements.txt`
-e cria um `.env` modelo com as variáveis mais usadas (em branco).
+instala o Django, roda `django-admin startproject core .`, gera o `requirements.txt`,
+cria o `.gitignore` (mesmo padrão do projeto SCSI) e um `.env` modelo com as variáveis
+mais usadas (em branco). Por fim, **pergunta se você quer enviar o projeto para o
+GitHub**: se sim, pergunta o **nome do repositório** (sugere o nome da pasta) e se ele
+deve ser **público ou privado**, cria o repositório com o `gh` e faz o **`first commit`**.
 
 ---
 
@@ -27,12 +31,6 @@ e cria um `.env` modelo com as variáveis mais usadas (em branco).
 
 ```bash
 curl -fsSL https://pycodebr.com.br/setup_local.sh -o setup_local.sh && bash setup_local.sh
-```
-
-Ou, se já tiver o repositório clonado:
-
-```bash
-bash scripts/setup_local.sh
 ```
 
 > O script é **interativo** (pergunta a pasta e o nome do projeto). Ele redireciona
@@ -77,11 +75,6 @@ para a maioria dos alunos.
    Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
    .\setup_local.ps1
    ```
-   Ou, se já tiver o repositório clonado:
-   ```powershell
-   Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
-   .\scripts\setup_local.ps1
-   ```
 4. Se ele habilitar o WSL2, **reinicie o Windows** e rode o script de novo
    (ele é idempotente e continua de onde parou).
 5. No fim, abra o **Docker Desktop** uma vez para concluir a configuração.
@@ -101,7 +94,7 @@ Para quem prefere um ambiente Linux limpo (mesmos comandos do Linux/macOS):
    Integration*, ative o Ubuntu). Alternativamente, instale o Docker Engine direto dentro do Ubuntu.
 3. Abra o **Ubuntu** (menu Iniciar) e rode o script de Linux normalmente:
    ```bash
-   bash scripts/setup_local.sh
+   curl -fsSL https://pycodebr.com.br/setup_local.sh -o setup_local.sh && bash setup_local.sh
    ```
 
 > Dica: trabalhe com os arquivos **dentro** do filesystem do WSL (ex.: `~/projects`),
@@ -132,10 +125,6 @@ levar o sistema do zero até o ar.
    Alternativa em uma linha só, sem salvar arquivo:
    ```bash
    sudo bash -c "$(curl -fsSL https://pycodebr.com.br/setup_deploy.sh)"
-   ```
-   Ou copie do seu PC via scp:
-   ```bash
-   scp scripts/setup_deploy.sh root@SEU_IP:~ && ssh root@SEU_IP 'bash setup_deploy.sh'
    ```
 
 > **Sobre `curl ... | bash`:** este script é **interativo** e troca de usuário no

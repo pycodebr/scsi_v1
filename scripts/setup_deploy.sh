@@ -2,7 +2,7 @@
 # =============================================================================
 #  setup_deploy.sh — Setup COMPLETO de VPS + Deploy (Docker Swarm + Traefik + GHCR)
 # =============================================================================
-#  Imersão IA Builders — deploy do zero, "como mágica", para qualquer sistema
+#  PycodeBR — deploy do zero, "como mágica", para qualquer sistema
 #  com a mesma stack/estrutura do SCSI (Django + Celery + Postgres + Redis +
 #  RabbitMQ, publicado via Traefik no Docker Swarm, imagens no GHCR).
 #
@@ -851,7 +851,7 @@ print_final_instructions() {
 : >"$LOG_FILE" 2>/dev/null || true
 
 if [[ "${1:-}" != "--as-deploy" ]]; then
-  banner "🚀  SETUP DE VPS + DEPLOY — Imersão IA Builders"
+  banner "🚀  SETUP DE VPS + DEPLOY — PycodeBR"
   echo "  Este script faz o deploy COMPLETO do seu sistema, do zero."
   echo "  É seguro e idempotente: pode rodar quantas vezes quiser."
   echo "  Log desta execução: ${GREY}${LOG_FILE}${RESET}"
