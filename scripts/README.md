@@ -15,7 +15,10 @@ em cada etapa e **tratamento de erro** com motivo, linha e log completo.
 
 O que cada script instala (se faltar): Python 3.13 + venv, Node.js + npm/npx,
 Docker + Compose, **Claude Code**, **OpenCode** e **Codex CLI**, git/curl e o
-**GitHub CLI (`gh`)** — e já **autentica você no GitHub** (`gh auth login`). Depois ele
+**GitHub CLI (`gh`)** — e já **autentica você no GitHub colando um token de acesso**
+(ele te guia passo a passo: abre o link certo em `github.com/settings/tokens/new` com os
+escopos `repo` e `workflow` já marcados, e você só cola o código `ghp_...`; o token é lido
+sem aparecer na tela). Não precisa de navegador no terminal. Depois ele
 **pergunta onde** criar o projeto e **qual o nome**, cria a pasta, monta a `.venv`,
 instala o Django, roda `django-admin startproject core .`, gera o `requirements.txt`,
 cria o `.gitignore` (mesmo padrão do projeto SCSI) e um `.env` modelo com as variáveis

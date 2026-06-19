@@ -14,7 +14,7 @@
 #         - OpenCode     (opencode-ai)
 #         - Codex CLI    (@openai/codex)
 #    6. Instala ferramentas de apoio (git, curl, etc.)
-#    7. Instala o GitHub CLI (gh) e autentica você no GitHub
+#    7. Instala o GitHub CLI (gh) e autentica você no GitHub (colando um token)
 #    8. Cria a pasta do SEU projeto (pergunta onde e qual nome)
 #    9. Cria a .venv, instala Django, roda `django-admin startproject core .`,
 #       gera o requirements.txt e o .gitignore
@@ -459,14 +459,49 @@ install_gh() {
 }
 install_gh
 
-# Autentica você no GitHub (interativo) — pula se já estiver autenticado
+# Autentica você no GitHub colando um TOKEN — pula se já estiver autenticado.
+# Usamos token (e não navegador) porque funciona em qualquer máquina, inclusive
+# servidores/WSL sem navegador, e é simples de seguir passo a passo.
 if have gh; then
   if gh auth status >/dev/null 2>&1; then
     skip "Autenticação no GitHub (gh já autenticado)"
+  elif [[ -n "${GH_TOKEN:-}${GITHUB_TOKEN:-}" ]]; then
+    # Já existe um token no ambiente — o gh usa ele sozinho, nada a fazer.
+    skip "Autenticação no GitHub (usando token da variável de ambiente)"
   else
-    info "Vamos autenticar você no GitHub agora (necessário para enviar o projeto)."
-    info "Dica: escolha ${BOLD}GitHub.com${RESET} → ${BOLD}HTTPS${RESET} → autenticar pelo ${BOLD}navegador${RESET}."
-    gh auth login || warn "Autenticação não concluída. Você pode rodar 'gh auth login' depois."
+    echo
+    info "Agora vamos conectar você ao GitHub usando um ${BOLD}token de acesso${RESET}."
+    info "É como uma senha temporária que autoriza este computador a enviar seu projeto."
+    echo
+    info "${BOLD}Passo a passo (faça no seu navegador, pode ser no celular):${RESET}"
+    info "  ${CYAN}1.${RESET} Faça login na sua conta em ${BOLD}https://github.com${RESET}"
+    info "  ${CYAN}2.${RESET} Abra este link, que já vem com tudo pré-preenchido:"
+    info "       ${BOLD}https://github.com/settings/tokens/new?scopes=repo,workflow&description=Setup%20PycodeBR${RESET}"
+    info "  ${CYAN}3.${RESET} Em ${BOLD}Expiration${RESET} escolha um prazo (ex.: 30 days)."
+    info "  ${CYAN}4.${RESET} Os escopos ${BOLD}repo${RESET} e ${BOLD}workflow${RESET} já vêm marcados — deixe assim."
+    info "  ${CYAN}5.${RESET} Desça e clique no botão verde ${BOLD}Generate token${RESET}."
+    info "  ${CYAN}6.${RESET} Copie o código gerado (começa com ${BOLD}ghp_...${RESET})."
+    info "     ${GREY}Atenção: o GitHub só mostra esse código UMA vez.${RESET}"
+    echo
+    info "Cole o token abaixo e tecle ENTER. ${GREY}(por segurança ele não aparece na tela)${RESET}"
+    # Lê o token sem exibir na tela; -s some com o eco, então imprimimos a quebra de linha.
+    GH_PAT=""
+    read -r -s -p "  ${CYAN}🔑 Cole seu token do GitHub: ${RESET}" GH_PAT </dev/tty || true
+    echo
+    if [[ -z "$GH_PAT" ]]; then
+      warn "Nenhum token informado. Pulando a autenticação por enquanto."
+      warn "Quando tiver o token, rode dentro da pasta: ${BOLD}gh auth login --with-token${RESET}"
+    else
+      working "Autenticando no GitHub com o token"
+      if printf '%s' "$GH_PAT" | gh auth login --with-token >>"$LOG_FILE" 2>&1; then
+        gh_user="$(gh api user --jq .login 2>/dev/null || true)"
+        ok "Autenticado no GitHub${gh_user:+ como ${BOLD}@${gh_user}${RESET}}"
+      else
+        warn "O token não foi aceito (pode estar incompleto, expirado ou sem o escopo 'repo')."
+        warn "Gere um novo no link acima e rode: ${BOLD}gh auth login --with-token${RESET}"
+      fi
+      unset GH_PAT
+    fi
   fi
 else
   warn "gh indisponível — a autenticação no GitHub será pulada."

@@ -15,7 +15,7 @@
         - OpenCode     (opencode-ai)
         - Codex CLI    (@openai/codex)
    7. Instala git e ferramentas de apoio
-   8. Instala o GitHub CLI (gh) e autentica voce no GitHub
+   8. Instala o GitHub CLI (gh) e autentica voce no GitHub (colando um token)
    9. Cria a pasta do SEU projeto (pergunta onde e qual nome)
   10. Cria a .venv, instala Django, roda 'django-admin startproject core .',
       gera o requirements.txt e o .gitignore
@@ -309,16 +309,52 @@ Show-Step "GitHub CLI (gh) + autenticacao no GitHub"
 # Instala o gh (CLI oficial do GitHub) via winget, de forma idempotente
 Install-Winget -Id 'GitHub.cli' -CheckCmd 'gh' -Label 'GitHub CLI (gh)'
 
-# Autentica voce no GitHub (interativo) — pula se ja estiver autenticado
+# Autentica voce no GitHub colando um TOKEN — pula se ja estiver autenticado.
+# Usamos token (e nao navegador) porque e simples de seguir passo a passo.
 if (Test-Cmd gh) {
   $ghAuthed = $false
   try { gh auth status *> $null; if ($LASTEXITCODE -eq 0) { $ghAuthed = $true } } catch {}
   if ($ghAuthed) {
     Skip "Autenticacao no GitHub (gh ja autenticado)"
+  } elseif ($env:GH_TOKEN -or $env:GITHUB_TOKEN) {
+    Skip "Autenticacao no GitHub (usando token da variavel de ambiente)"
   } else {
-    Info "Vamos autenticar voce no GitHub agora (necessario para enviar o projeto)."
-    Info "Dica: escolha GitHub.com > HTTPS > autenticar pelo navegador."
-    try { gh auth login } catch { Warn "Autenticacao nao concluida. Rode 'gh auth login' depois." }
+    Write-Host ""
+    Info "Agora vamos conectar voce ao GitHub usando um token de acesso."
+    Info "E como uma senha temporaria que autoriza este computador a enviar seu projeto."
+    Write-Host ""
+    Info "Passo a passo (faca no seu navegador, pode ser no celular):"
+    Info "  1. Faca login na sua conta em https://github.com"
+    Info "  2. Abra este link, que ja vem com tudo pre-preenchido:"
+    Info "       https://github.com/settings/tokens/new?scopes=repo,workflow&description=Setup%20PycodeBR"
+    Info "  3. Em Expiration escolha um prazo (ex.: 30 days)."
+    Info "  4. Os escopos 'repo' e 'workflow' ja vem marcados — deixe assim."
+    Info "  5. Desca e clique no botao verde 'Generate token'."
+    Info "  6. Copie o codigo gerado (comeca com ghp_...)."
+    Info "     Atencao: o GitHub so mostra esse codigo UMA vez."
+    Write-Host ""
+    Info "Cole o token abaixo e tecle ENTER (por seguranca ele nao aparece na tela)."
+    $sec = Read-Host "  Cole seu token do GitHub" -AsSecureString
+    $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($sec)
+    $ghPat = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($bstr)
+    [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
+    if ([string]::IsNullOrWhiteSpace($ghPat)) {
+      Warn "Nenhum token informado. Pulando a autenticacao por enquanto."
+      Warn "Quando tiver o token, rode na pasta: gh auth login --with-token"
+    } else {
+      Working "Autenticando no GitHub com o token"
+      $ghPat.Trim() | gh auth login --with-token 2>&1 | Add-Content $script:LogFile
+      $ghOk = $false
+      try { gh auth status *> $null; if ($LASTEXITCODE -eq 0) { $ghOk = $true } } catch {}
+      if ($ghOk) {
+        $ghUser = (gh api user --jq .login 2>$null)
+        if ($ghUser) { Ok "Autenticado no GitHub como @$ghUser" } else { Ok "Autenticado no GitHub" }
+      } else {
+        Warn "O token nao foi aceito (pode estar incompleto, expirado ou sem o escopo 'repo')."
+        Warn "Gere um novo no link acima e rode: gh auth login --with-token"
+      }
+      $ghPat = $null
+    }
   }
 } else {
   Warn "gh indisponivel — a autenticacao no GitHub sera pulada."

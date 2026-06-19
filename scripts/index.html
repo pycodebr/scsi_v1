@@ -482,7 +482,7 @@
         <span class="chip"><i></i>Codex CLI</span>
         <span class="chip"><i></i>git / curl</span>
         <span class="chip alt"><i></i>GitHub CLI (gh)</span>
-        <span class="chip alt"><i></i>gh auth login</span>
+        <span class="chip alt"><i></i>login no GitHub via token</span>
       </div>
       <p style="margin-top:22px">Depois ele <strong>pergunta onde</strong> criar o projeto e <strong>qual o nome</strong>, cria a pasta, monta a <code>.venv</code>, instala o Django, roda <code>django-admin startproject core .</code>, gera o <code>requirements.txt</code>, cria o <code>.gitignore</code> (mesmo padrão do projeto SCSI) e um <code>.env</code> modelo. Por fim, <strong>pergunta se você quer enviar o projeto para o GitHub</strong> — e, se sim, cria o repositório e faz o <code>first commit</code>.</p>
     </section>
@@ -498,7 +498,7 @@
         <div class="step"><span class="num"></span><div><h4>Node.js + npm/npx</h4><p>LTS via gerenciador nativo ou NodeSource.</p></div></div>
         <div class="step"><span class="num"></span><div><h4>Docker + Compose</h4><p>Docker Desktop (mac/win) ou Engine (Linux).</p></div></div>
         <div class="step"><span class="num"></span><div><h4>CLIs de IA</h4><p>Claude Code · OpenCode · Codex (npm global).</p></div></div>
-        <div class="step"><span class="num"></span><div><h4>GitHub CLI (gh) + login</h4><p>Instala o <code>gh</code> e roda <code>gh auth login</code>.</p></div></div>
+        <div class="step"><span class="num"></span><div><h4>GitHub CLI (gh) + login</h4><p>Instala o <code>gh</code> e te guia a <strong>colar um token</strong> de <code>github.com/settings/tokens</code> (sem navegador).</p></div></div>
         <div class="step"><span class="num"></span><div><h4>Dados do projeto</h4><p>Pergunta onde criar e o nome (sem espaços).</p></div></div>
         <div class="step"><span class="num"></span><div><h4>Cria a pasta</h4><p>Com checagem de pasta já existente.</p></div></div>
         <div class="step"><span class="num"></span><div><h4>.venv + Django</h4><p><code>startproject core .</code> + <code>requirements.txt</code> + <code>.gitignore</code>.</p></div></div>
@@ -657,7 +657,7 @@
       </div>
       <div class="acc">
         <button class="acc__h">Comando <code>gh</code> não encontrado / não autenticado <span class="pm">+</span></button>
-        <div class="acc__b"><div class="inner">Reabra o terminal. Se persistir, instale manualmente em <a href="https://cli.github.com" target="_blank" rel="noopener">cli.github.com</a> e rode <code>gh auth login</code>. Depois, dentro da pasta do projeto, <code>gh repo create</code> envia tudo.</div></div>
+        <div class="acc__b"><div class="inner">Reabra o terminal. Se persistir, instale manualmente em <a href="https://cli.github.com" target="_blank" rel="noopener">cli.github.com</a>. Para autenticar, gere um token em <a href="https://github.com/settings/tokens/new?scopes=repo,workflow&description=Setup%20PycodeBR" target="_blank" rel="noopener">github.com/settings/tokens</a> (escopos <code>repo</code> e <code>workflow</code>) e rode <code>gh auth login --with-token</code> colando o código. Depois, dentro da pasta do projeto, <code>gh repo create</code> envia tudo.</div></div>
       </div>
       <div class="acc">
         <button class="acc__h">Windows: <code>winget</code> não encontrado <span class="pm">+</span></button>
@@ -787,8 +787,9 @@ document.querySelectorAll('main section[id]').forEach(s=>{if(map.has(s.id)) spy.
     {t:'',cls:'',k:'──────────────────────────────',kc:'c-c'},
     {t:'▶ ETAPA 5/11: ',cls:'c-c',k:'CLIs de IA · gh',kc:'c-m'},
     {t:'  ✔ ',cls:'c-g',k:'Claude Code · OpenCode · Codex instalados',kc:'c-m'},
-    {t:'▶ ETAPA 6/11: ',cls:'c-c',k:'GitHub CLI (gh) + autenticação',kc:'c-m'},
-    {t:'  ✔ ',cls:'c-g',k:'gh autenticado em GitHub.com',kc:'c-m'},
+    {t:'▶ ETAPA 6/11: ',cls:'c-c',k:'GitHub CLI (gh) + token',kc:'c-m'},
+    {t:'  🔑 ',cls:'c-a',k:'Cole seu token do GitHub: ••••••••',kc:'c-g'},
+    {t:'  ✔ ',cls:'c-g',k:'Autenticado no GitHub como @voce',kc:'c-m'},
     {t:'  ✔ ',cls:'c-g',k:'requirements.txt + .gitignore gerados',kc:'c-m'},
     {t:'❓ ',cls:'c-a',k:'Enviar este projeto para o GitHub? [S/N]: S',kc:'c-g'},
     {t:'  ✔ ',cls:'c-g',k:'repo criado · "first commit" enviado 🎉',kc:'c-m'},
