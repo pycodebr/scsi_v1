@@ -14,7 +14,8 @@
 #         - OpenCode     (opencode-ai)
 #         - Codex CLI    (@openai/codex)
 #    6. Instala ferramentas de apoio (git, curl, etc.)
-#    7. Instala o GitHub CLI (gh) e autentica você no GitHub (colando um token)
+#    7. Instala o GitHub CLI (gh) e autentica você no GitHub
+#       (fluxo padrão; se falhar, fallback guiado por token)
 #    8. Cria a pasta do SEU projeto (pergunta onde e qual nome)
 #    9. Cria a .venv, instala Django, roda `django-admin startproject core .`,
 #       gera o requirements.txt e o .gitignore
@@ -459,9 +460,50 @@ install_gh() {
 }
 install_gh
 
-# Autentica você no GitHub colando um TOKEN — pula se já estiver autenticado.
-# Usamos token (e não navegador) porque funciona em qualquer máquina, inclusive
-# servidores/WSL sem navegador, e é simples de seguir passo a passo.
+# Fallback de autenticação: guia o usuário a gerar e COLAR um token de acesso.
+# Usado quando o 'gh auth login' padrão (navegador/dispositivo) não dá certo —
+# útil em máquinas sem navegador (servidores/WSL) ou quando o fluxo web falha.
+gh_token_login() {
+  echo
+  info "Vamos autenticar pelo método do ${BOLD}token de acesso${RESET}."
+  info "É como uma senha temporária que autoriza este computador a enviar seu projeto."
+  echo
+  info "${BOLD}Passo a passo (faça no seu navegador, pode ser no celular):${RESET}"
+  info "  ${CYAN}1.${RESET} Faça login na sua conta em ${BOLD}https://github.com${RESET}"
+  info "  ${CYAN}2.${RESET} Abra este link, que já vem com tudo pré-preenchido:"
+  info "       ${BOLD}https://github.com/settings/tokens/new?scopes=repo,workflow&description=Setup%20PycodeBR${RESET}"
+  info "  ${CYAN}3.${RESET} Em ${BOLD}Expiration${RESET} escolha um prazo (ex.: 30 days)."
+  info "  ${CYAN}4.${RESET} Os escopos ${BOLD}repo${RESET} e ${BOLD}workflow${RESET} já vêm marcados — deixe assim."
+  info "  ${CYAN}5.${RESET} Desça e clique no botão verde ${BOLD}Generate token${RESET}."
+  info "  ${CYAN}6.${RESET} Copie o código gerado (começa com ${BOLD}ghp_...${RESET})."
+  info "     ${GREY}Atenção: o GitHub só mostra esse código UMA vez.${RESET}"
+  echo
+  info "Cole o token abaixo e tecle ENTER. ${GREY}(por segurança ele não aparece na tela)${RESET}"
+  # Lê o token sem exibir na tela; -s some com o eco, então imprimimos a quebra de linha.
+  local GH_PAT=""
+  read -r -s -p "  ${CYAN}🔑 Cole seu token do GitHub: ${RESET}" GH_PAT </dev/tty || true
+  echo
+  if [[ -z "$GH_PAT" ]]; then
+    warn "Nenhum token informado. Pulando a autenticação por enquanto."
+    warn "Quando tiver o token, rode dentro da pasta: ${BOLD}gh auth login --with-token${RESET}"
+    return 1
+  fi
+  working "Autenticando no GitHub com o token"
+  if printf '%s' "$GH_PAT" | gh auth login --with-token >>"$LOG_FILE" 2>&1; then
+    local gh_user; gh_user="$(gh api user --jq .login 2>/dev/null || true)"
+    ok "Autenticado no GitHub${gh_user:+ como ${BOLD}@${gh_user}${RESET}}"
+    unset GH_PAT
+    return 0
+  fi
+  warn "O token não foi aceito (pode estar incompleto, expirado ou sem o escopo 'repo')."
+  warn "Gere um novo no link acima e rode: ${BOLD}gh auth login --with-token${RESET}"
+  unset GH_PAT
+  return 1
+}
+
+# Autentica você no GitHub — pula se já estiver autenticado.
+# 1) tenta o fluxo padrão do gh (navegador/dispositivo);
+# 2) se falhar, cai no fallback guiado por token (gh_token_login).
 if have gh; then
   if gh auth status >/dev/null 2>&1; then
     skip "Autenticação no GitHub (gh já autenticado)"
@@ -469,38 +511,22 @@ if have gh; then
     # Já existe um token no ambiente — o gh usa ele sozinho, nada a fazer.
     skip "Autenticação no GitHub (usando token da variável de ambiente)"
   else
-    echo
-    info "Agora vamos conectar você ao GitHub usando um ${BOLD}token de acesso${RESET}."
-    info "É como uma senha temporária que autoriza este computador a enviar seu projeto."
-    echo
-    info "${BOLD}Passo a passo (faça no seu navegador, pode ser no celular):${RESET}"
-    info "  ${CYAN}1.${RESET} Faça login na sua conta em ${BOLD}https://github.com${RESET}"
-    info "  ${CYAN}2.${RESET} Abra este link, que já vem com tudo pré-preenchido:"
-    info "       ${BOLD}https://github.com/settings/tokens/new?scopes=repo,workflow&description=Setup%20PycodeBR${RESET}"
-    info "  ${CYAN}3.${RESET} Em ${BOLD}Expiration${RESET} escolha um prazo (ex.: 30 days)."
-    info "  ${CYAN}4.${RESET} Os escopos ${BOLD}repo${RESET} e ${BOLD}workflow${RESET} já vêm marcados — deixe assim."
-    info "  ${CYAN}5.${RESET} Desça e clique no botão verde ${BOLD}Generate token${RESET}."
-    info "  ${CYAN}6.${RESET} Copie o código gerado (começa com ${BOLD}ghp_...${RESET})."
-    info "     ${GREY}Atenção: o GitHub só mostra esse código UMA vez.${RESET}"
-    echo
-    info "Cole o token abaixo e tecle ENTER. ${GREY}(por segurança ele não aparece na tela)${RESET}"
-    # Lê o token sem exibir na tela; -s some com o eco, então imprimimos a quebra de linha.
-    GH_PAT=""
-    read -r -s -p "  ${CYAN}🔑 Cole seu token do GitHub: ${RESET}" GH_PAT </dev/tty || true
-    echo
-    if [[ -z "$GH_PAT" ]]; then
-      warn "Nenhum token informado. Pulando a autenticação por enquanto."
-      warn "Quando tiver o token, rode dentro da pasta: ${BOLD}gh auth login --with-token${RESET}"
+    info "Vamos conectar você ao GitHub (necessário para enviar o projeto)."
+    info "A seguir o GitHub CLI faz algumas perguntas ${BOLD}em inglês${RESET}. Responda assim:"
+    info "  ${CYAN}•${RESET} ${BOLD}What account do you want to log into?${RESET} → escolha ${BOLD}GitHub.com${RESET}"
+    info "  ${CYAN}•${RESET} ${BOLD}What is your preferred protocol...?${RESET} → escolha ${BOLD}HTTPS${RESET}"
+    info "  ${CYAN}•${RESET} ${BOLD}Authenticate Git with your GitHub credentials?${RESET} → ${BOLD}Yes${RESET} (Sim)"
+    info "  ${CYAN}•${RESET} ${BOLD}How would you like to authenticate...?${RESET} → ${BOLD}Login with a web browser${RESET} (pelo navegador)"
+    info "  ${CYAN}•${RESET} Ele mostra um código (ex.: ${BOLD}ABCD-1234${RESET}); copie, tecle ENTER, cole no navegador e autorize."
+    info "${GREY}(Use ↑ ↓ para navegar e ENTER para escolher. Se não conseguir, seguimos pelo token.)${RESET}"
+    gh auth login </dev/tty || true
+    # Confirma se deu certo; se não, oferece o fallback guiado por token.
+    if gh auth status >/dev/null 2>&1; then
+      gh_user="$(gh api user --jq .login 2>/dev/null || true)"
+      ok "Autenticado no GitHub${gh_user:+ como ${BOLD}@${gh_user}${RESET}}"
     else
-      working "Autenticando no GitHub com o token"
-      if printf '%s' "$GH_PAT" | gh auth login --with-token >>"$LOG_FILE" 2>&1; then
-        gh_user="$(gh api user --jq .login 2>/dev/null || true)"
-        ok "Autenticado no GitHub${gh_user:+ como ${BOLD}@${gh_user}${RESET}}"
-      else
-        warn "O token não foi aceito (pode estar incompleto, expirado ou sem o escopo 'repo')."
-        warn "Gere um novo no link acima e rode: ${BOLD}gh auth login --with-token${RESET}"
-      fi
-      unset GH_PAT
+      warn "A autenticação padrão não foi concluída. Vamos tentar pelo token."
+      gh_token_login || true
     fi
   fi
 else

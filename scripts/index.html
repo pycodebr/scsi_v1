@@ -482,7 +482,7 @@
         <span class="chip"><i></i>Codex CLI</span>
         <span class="chip"><i></i>git / curl</span>
         <span class="chip alt"><i></i>GitHub CLI (gh)</span>
-        <span class="chip alt"><i></i>login no GitHub via token</span>
+        <span class="chip alt"><i></i>login no GitHub (token de fallback)</span>
       </div>
       <p style="margin-top:22px">Depois ele <strong>pergunta onde</strong> criar o projeto e <strong>qual o nome</strong>, cria a pasta, monta a <code>.venv</code>, instala o Django, roda <code>django-admin startproject core .</code>, gera o <code>requirements.txt</code>, cria o <code>.gitignore</code> (mesmo padrão do projeto SCSI) e um <code>.env</code> modelo. Por fim, <strong>pergunta se você quer enviar o projeto para o GitHub</strong> — e, se sim, cria o repositório e faz o <code>first commit</code>.</p>
     </section>
@@ -498,7 +498,7 @@
         <div class="step"><span class="num"></span><div><h4>Node.js + npm/npx</h4><p>LTS via gerenciador nativo ou NodeSource.</p></div></div>
         <div class="step"><span class="num"></span><div><h4>Docker + Compose</h4><p>Docker Desktop (mac/win) ou Engine (Linux).</p></div></div>
         <div class="step"><span class="num"></span><div><h4>CLIs de IA</h4><p>Claude Code · OpenCode · Codex (npm global).</p></div></div>
-        <div class="step"><span class="num"></span><div><h4>GitHub CLI (gh) + login</h4><p>Instala o <code>gh</code> e te guia a <strong>colar um token</strong> de <code>github.com/settings/tokens</code> (sem navegador).</p></div></div>
+        <div class="step"><span class="num"></span><div><h4>GitHub CLI (gh) + login</h4><p>Instala o <code>gh</code> e faz o login padrão; <strong>se falhar</strong>, te guia a <strong>colar um token</strong> de <code>github.com/settings/tokens</code> (sem navegador).</p></div></div>
         <div class="step"><span class="num"></span><div><h4>Dados do projeto</h4><p>Pergunta onde criar e o nome (sem espaços).</p></div></div>
         <div class="step"><span class="num"></span><div><h4>Cria a pasta</h4><p>Com checagem de pasta já existente.</p></div></div>
         <div class="step"><span class="num"></span><div><h4>.venv + Django</h4><p><code>startproject core .</code> + <code>requirements.txt</code> + <code>.gitignore</code>.</p></div></div>
@@ -787,7 +787,8 @@ document.querySelectorAll('main section[id]').forEach(s=>{if(map.has(s.id)) spy.
     {t:'',cls:'',k:'──────────────────────────────',kc:'c-c'},
     {t:'▶ ETAPA 5/11: ',cls:'c-c',k:'CLIs de IA · gh',kc:'c-m'},
     {t:'  ✔ ',cls:'c-g',k:'Claude Code · OpenCode · Codex instalados',kc:'c-m'},
-    {t:'▶ ETAPA 6/11: ',cls:'c-c',k:'GitHub CLI (gh) + token',kc:'c-m'},
+    {t:'▶ ETAPA 6/11: ',cls:'c-c',k:'GitHub CLI (gh) + login',kc:'c-m'},
+    {t:'  ⚠ ',cls:'c-a',k:'login padrão falhou — usando fallback por token',kc:'c-m'},
     {t:'  🔑 ',cls:'c-a',k:'Cole seu token do GitHub: ••••••••',kc:'c-g'},
     {t:'  ✔ ',cls:'c-g',k:'Autenticado no GitHub como @voce',kc:'c-m'},
     {t:'  ✔ ',cls:'c-g',k:'requirements.txt + .gitignore gerados',kc:'c-m'},
