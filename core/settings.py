@@ -284,3 +284,55 @@ LOGGING = {
         },
     },
 }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Observabilidade / Métricas — django-prometheus (stack de monitoramento OPCIONAL)
+# ─────────────────────────────────────────────────────────────────────────────
+# A instrumentação só é ATIVADA se a biblioteca `django_prometheus` estiver
+# instalada. Assim o app continua subindo normalmente mesmo sem a stack de
+# monitoramento no ar — adicionar a monitoria NÃO interfere no deploy de produção
+# já existente (degradação graciosa: sem a lib, vira um no-op).
+#
+# Quando ativa, expõe o endpoint /metrics (ver core/urls.py) com, de graça:
+#   - histograma de latência das requests, contadores por status/método/view;
+#   - métricas de conexões e queries do banco (engine instrumentada);
+#   - métricas de cache, migrations e modelos.
+# O Prometheus coleta esse /metrics pela rede overlay interna do Swarm; o
+# endpoint NÃO é publicado pelo Traefik (ver monitoring/prometheus/prometheus.yml).
+try:
+    import django_prometheus  # noqa: F401
+
+    PROMETHEUS_ENABLED = True
+except ImportError:
+    PROMETHEUS_ENABLED = False
+
+if PROMETHEUS_ENABLED:
+    # Prefixo das métricas (ex.: scsi_django_http_requests_total). Mantenha igual
+    # ao usado nos dashboards e alertas do Grafana/Prometheus.
+    PROMETHEUS_METRIC_NAMESPACE = env('PROMETHEUS_METRIC_NAMESPACE', default='scsi')
+
+    # `django_prometheus` precisa estar no INSTALLED_APPS para registrar métricas.
+    if 'django_prometheus' not in INSTALLED_APPS:
+        INSTALLED_APPS = INSTALLED_APPS + ['django_prometheus']
+
+    # Os middlewares de instrumentação envolvem TODA a pilha: o "Before" roda
+    # primeiro e o "After" por último, medindo o tempo total de cada request.
+    if 'django_prometheus.middleware.PrometheusBeforeMiddleware' not in MIDDLEWARE:
+        MIDDLEWARE = (
+            ['django_prometheus.middleware.PrometheusBeforeMiddleware']
+            + MIDDLEWARE
+            + ['django_prometheus.middleware.PrometheusAfterMiddleware']
+        )
+
+    # Troca a engine do banco pela versão instrumentada do django-prometheus, que
+    # publica métricas de execução/erros de query sem alterar o comportamento.
+    _PROMETHEUS_DB_ENGINE_MAP = {
+        'django.db.backends.postgresql': 'django_prometheus.db.backends.postgresql',
+        'django.db.backends.postgresql_psycopg2': 'django_prometheus.db.backends.postgresql',
+        'django.db.backends.sqlite3': 'django_prometheus.db.backends.sqlite3',
+        'django.db.backends.mysql': 'django_prometheus.db.backends.mysql',
+    }
+    for _db_config in DATABASES.values():
+        _engine = _db_config.get('ENGINE', '')
+        _db_config['ENGINE'] = _PROMETHEUS_DB_ENGINE_MAP.get(_engine, _engine)

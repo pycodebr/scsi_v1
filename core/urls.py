@@ -14,6 +14,7 @@ Including another URLconf
     1. Import the include() function: from django.urls import include, path
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
+from django.conf import settings
 from django.contrib import admin
 from django.http import JsonResponse
 from django.urls import include, path
@@ -58,3 +59,10 @@ urlpatterns = [
     path('ai/', include('ai_agents.urls')),
     path('relatorios/', include('reports.urls')),
 ]
+
+# Métricas do Prometheus em /metrics — habilitado apenas quando a instrumentação
+# do django-prometheus está ativa (lib instalada; ver core/settings.py). O
+# Prometheus coleta esse endpoint pela rede interna do Swarm; ele NÃO é roteado
+# pelo Traefik, então não fica exposto publicamente na internet.
+if getattr(settings, 'PROMETHEUS_ENABLED', False):
+    urlpatterns += [path('', include('django_prometheus.urls'))]

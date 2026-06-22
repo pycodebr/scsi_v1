@@ -1,0 +1,220 @@
+# =============================================================================
+#  monitoring-stack.yml — Stack de Monitoramento, Observabilidade e Logs
+# =============================================================================
+#  Stack SEPARADA da aplicação (docker-stack.yml). Pode ser publicada DEPOIS do
+#  deploy do sistema, sem interferir no que já está no ar. Sobe:
+#
+#    Prometheus     -> coleta e armazena métricas (TSDB)
+#    Grafana        -> dashboards e visualização (publicado via Traefik)
+#    Loki           -> agregação de logs
+#    Promtail       -> envia os logs dos containers para o Loki
+#    node-exporter  -> métricas do host (CPU, RAM, disco, rede)
+#    cAdvisor       -> métricas por container
+#
+#  TEMPLATE GENÉRICO: tudo que é específico do projeto vem do .env (interpolado
+#  pelo `docker stack deploy`). Para reaproveitar em outro projeto, basta ajustar
+#  o .env e o alvo de scrape em monitoring/prometheus/prometheus.yml.
+#
+#  Variáveis lidas do .env (ver .env.example, seção "Monitoramento"):
+#    GRAFANA_DOMAIN, GRAFANA_ADMIN_USER, GRAFANA_ADMIN_PASSWORD,
+#    PROMETHEUS_RETENTION, LOKI_RETENTION, MONITORING_CONFIG_DIR
+#
+#  Suba com: ./scripts/setup_monitoring.sh   (1ª vez, guiado)
+#  Redeploy: ./scripts/deploy_monitoring.sh  (do zero)
+# =============================================================================
+version: "3.9"
+
+services:
+  # ── Métricas: coleta e armazenamento ──────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v3.1.0
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=${PROMETHEUS_RETENTION:-15d}"
+      - "--web.enable-lifecycle"
+    volumes:
+      - prometheus_data:/prometheus
+      - ${MONITORING_CONFIG_DIR}/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ${MONITORING_CONFIG_DIR}/prometheus/alert_rules.yml:/etc/prometheus/alert_rules.yml:ro
+    networks:
+      - monitoring
+      - traefik_public
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 5
+        window: 120s
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+        reservations:
+          cpus: "0.15"
+          memory: 256M
+
+  # ── Visualização: dashboards (publicado via Traefik) ──────────────────────
+  grafana:
+    image: grafana/grafana:11.4.0
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
+      - GF_SERVER_ROOT_URL=https://${GRAFANA_DOMAIN}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_ANALYTICS_REPORTING_ENABLED=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ${MONITORING_CONFIG_DIR}/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ${MONITORING_CONFIG_DIR}/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    networks:
+      - monitoring
+      - traefik_public
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 5
+        window: 120s
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.grafana.rule=Host(`${GRAFANA_DOMAIN}`)"
+        - "traefik.http.routers.grafana.entrypoints=websecure"
+        - "traefik.http.routers.grafana.tls=true"
+        - "traefik.http.routers.grafana.tls.certresolver=letsencrypt"
+        - "traefik.http.services.grafana.loadbalancer.server.port=3000"
+      resources:
+        limits:
+          cpus: "0.3"
+          memory: 256M
+        reservations:
+          cpus: "0.1"
+          memory: 128M
+
+  # ── Logs: agregação ───────────────────────────────────────────────────────
+  loki:
+    image: grafana/loki:3.3.2
+    command:
+      - "-config.file=/etc/loki/loki-config.yml"
+      - "-config.expand-env=true"
+    environment:
+      - LOKI_RETENTION=${LOKI_RETENTION:-360h}
+    volumes:
+      - loki_data:/loki
+      - ${MONITORING_CONFIG_DIR}/loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+    networks:
+      - monitoring
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 5
+        window: 120s
+      resources:
+        limits:
+          cpus: "0.3"
+          memory: 256M
+        reservations:
+          cpus: "0.1"
+          memory: 128M
+
+  # ── Logs: coletor (1 por nó) ──────────────────────────────────────────────
+  promtail:
+    image: grafana/promtail:3.3.2
+    command: -config.file=/etc/promtail/promtail-config.yml
+    volumes:
+      - /var/log:/var/log:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ${MONITORING_CONFIG_DIR}/promtail/promtail-config.yml:/etc/promtail/promtail-config.yml:ro
+    networks:
+      - monitoring
+    deploy:
+      mode: global
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 5
+        window: 120s
+      resources:
+        limits:
+          cpus: "0.15"
+          memory: 128M
+
+  # ── Métricas do host (1 por nó) ───────────────────────────────────────────
+  node-exporter:
+    image: prom/node-exporter:v1.8.2
+    command:
+      - "--path.rootfs=/host"
+      - "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)"
+    volumes:
+      - /:/host:ro,rslave
+    networks:
+      - monitoring
+    deploy:
+      mode: global
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 5
+        window: 120s
+      resources:
+        limits:
+          cpus: "0.15"
+          memory: 64M
+
+  # ── Métricas por container (1 por nó) ─────────────────────────────────────
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    command:
+      - "--docker_only=true"
+      - "--housekeeping_interval=30s"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    networks:
+      - monitoring
+    deploy:
+      mode: global
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 5
+        window: 120s
+      resources:
+        limits:
+          cpus: "0.15"
+          memory: 128M
+
+volumes:
+  prometheus_data:
+  grafana_data:
+  loki_data:
+
+networks:
+  # Rede dedicada da monitoria (criada pelos scripts setup/deploy_monitoring.sh).
+  monitoring:
+    external: true
+  # Mesma rede pública do Traefik usada pela aplicação. Permite:
+  #   1) o Traefik publicar o Grafana com TLS;
+  #   2) o Prometheus coletar o /metrics do app (tasks.<stack>_app:8000).
+  traefik_public:
+    external: true

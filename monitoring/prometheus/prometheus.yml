@@ -1,0 +1,61 @@
+# =============================================================================
+#  Prometheus — configuração de coleta (scrape) e regras de alerta
+# =============================================================================
+#  O Prometheus descobre os alvos pela rede overlay do Swarm usando DNS interno:
+#    - tasks.<serviço>        -> resolve para os IPs de TODAS as réplicas (A records)
+#  Não há nada exposto na internet aqui: toda coleta é interna ao cluster.
+# =============================================================================
+global:
+  scrape_interval: 30s
+  evaluation_interval: 30s
+  external_labels:
+    project: "scsi_v1"
+
+rule_files:
+  - "alert_rules.yml"
+
+scrape_configs:
+  # ── O próprio Prometheus ──
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # ── Métricas do host (node-exporter, 1 por nó) ──
+  - job_name: "node-exporter"
+    dns_sd_configs:
+      - names: ["tasks.node-exporter"]
+        type: A
+        port: 9100
+
+  # ── Métricas por container (cAdvisor, 1 por nó) ──
+  - job_name: "cadvisor"
+    dns_sd_configs:
+      - names: ["tasks.cadvisor"]
+        type: A
+        port: 8080
+
+  # ── Aplicação Django (django-prometheus expõe /metrics) ──
+  #  ÚNICO valor específico do projeto neste arquivo: o nome do serviço do app
+  #  no Swarm é "<stack>_app". Com a stack publicada como "scsi_v1", o alvo é
+  #  "tasks.scsi_v1_app". Se reutilizar este template em outro projeto, ajuste
+  #  APENAS a linha abaixo (e nada no monitoring-stack.yml).
+  - job_name: "django"
+    metrics_path: "/metrics"
+    dns_sd_configs:
+      - names: ["tasks.scsi_v1_app"]
+        type: A
+        port: 8000
+
+  # ── Traefik (OPCIONAL) ──
+  #  Desabilitado por padrão: habilitar exige ligar o endpoint de métricas do
+  #  Traefik no docker-stack.yml (3 linhas no `command` do serviço traefik) e
+  #  redeployar a aplicação — o que mexe na stack de produção. Por isso fica
+  #  como opt-in. Para ligar, adicione ao command do traefik no docker-stack.yml:
+  #     - "--metrics.prometheus=true"
+  #     - "--metrics.prometheus.addEntryPointsLabels=true"
+  #     - "--metrics.prometheus.addServicesLabels=true"
+  #  e então descomente o bloco abaixo (o serviço vira "scsi_v1_traefik:8080"):
+  #
+  # - job_name: "traefik"
+  #   static_configs:
+  #     - targets: ["scsi_v1_traefik:8080"]

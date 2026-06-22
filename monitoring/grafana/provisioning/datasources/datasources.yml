@@ -1,0 +1,28 @@
+# =============================================================================
+#  Grafana — provisionamento automático de datasources
+# =============================================================================
+#  Carregado pelo Grafana no boot. Cria as fontes de dados sem cliques manuais:
+#    - Prometheus (métricas)  -> default
+#    - Loki (logs)
+#  Os hostnames resolvem pela rede "monitoring" do Swarm (nomes dos serviços).
+# =============================================================================
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    uid: prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false
+    jsonData:
+      httpMethod: POST
+      timeInterval: "30s"
+
+  - name: Loki
+    uid: loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    editable: false

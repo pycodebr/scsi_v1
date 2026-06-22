@@ -1,0 +1,20 @@
+# =============================================================================
+#  Grafana — provedor de dashboards (auto-import)
+# =============================================================================
+#  Faz o Grafana carregar TODO arquivo .json em /var/lib/grafana/dashboards
+#  (montado a partir de monitoring/grafana/dashboards). Para adicionar um
+#  dashboard novo, basta soltar o .json naquela pasta e redeployar a monitoria.
+# =============================================================================
+apiVersion: 1
+
+providers:
+  - name: "SCSI Dashboards"
+    orgId: 1
+    folder: "SCSI"
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false

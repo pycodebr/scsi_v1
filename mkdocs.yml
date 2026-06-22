@@ -35,5 +35,6 @@ nav:
   - Variáveis de Ambiente: env-vars.md
   - Desenvolvimento Local: local-dev.md
   - Deploy: deploy.md
+  - Monitoramento e Observabilidade: monitoring.md
   - Backup e Restore: backup.md
   - Runbook: runbook.md

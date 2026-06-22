@@ -1,0 +1,82 @@
+# =============================================================================
+#  Prometheus — Regras de Alerta
+# =============================================================================
+#  Regras de avaliação. Os alertas DISPARADOS ficam visíveis na aba "Alerts" do
+#  Prometheus e podem ser exibidos no Grafana. Para notificações ativas (e-mail,
+#  Slack, Telegram), plugue um Alertmanager (não incluso nesta stack enxuta).
+#
+#  Severidades: critical = acordar alguém; warning = investigar no horário.
+# =============================================================================
+groups:
+  - name: scsi_infra
+    rules:
+      # Qualquer alvo monitorado parou de responder (app, node-exporter, etc.).
+      - alert: ServiceDown
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Serviço {{ $labels.job }} fora do ar"
+          description: "O alvo {{ $labels.instance }} do job {{ $labels.job }} está inacessível há mais de 1 minuto."
+
+      # Container consumindo mais de 85% do limite de memória (risco de OOMKill).
+      - alert: HighMemoryUsage
+        expr: (container_memory_usage_bytes / container_spec_memory_limit_bytes) > 0.85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Container {{ $labels.name }} usando >85% da memória"
+          description: "Uso de memória acima de 85% do limite por 5 minutos — risco de OOMKill."
+
+      # CPU sustentada acima de 80% do limite.
+      - alert: HighCPUUsage
+        expr: rate(container_cpu_usage_seconds_total[5m]) > 0.8
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Container {{ $labels.name }} usando >80% de CPU"
+          description: "Uso de CPU acima de 80% por 5 minutos."
+
+      # Disco do host com menos de 15% livre na raiz.
+      - alert: DiskSpaceLow
+        expr: (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) < 0.15
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Disco com menos de 15% livre"
+          description: "A partição raiz do host {{ $labels.instance }} está com pouco espaço livre."
+
+  - name: scsi_app
+    rules:
+      # Taxa de erros 5xx do Django acima de 5% das respostas (5 min).
+      # Métrica do django-prometheus; o prefixo segue PROMETHEUS_METRIC_NAMESPACE
+      # (padrão "scsi"). Ajuste o prefixo se mudar o namespace no settings.py.
+      - alert: HighDjango5xxRate
+        expr: |
+          sum(rate(scsi_django_http_responses_total_by_status_total{status=~"5.."}[5m]))
+          /
+          sum(rate(scsi_django_http_responses_total_by_status_total[5m])) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Taxa de erros 5xx do Django acima de 5%"
+          description: "Mais de 5% das respostas HTTP retornaram 5xx nos últimos 5 minutos."
+
+      # Latência P95 das requests do Django acima de 2s.
+      - alert: HighDjangoLatencyP95
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum(rate(scsi_django_http_requests_latency_seconds_by_view_method_bucket[5m])) by (le)
+          ) > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Latência P95 do Django acima de 2s"
+          description: "O percentil 95 do tempo de resposta passou de 2s nos últimos 5 minutos."
