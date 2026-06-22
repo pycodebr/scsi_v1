@@ -16,6 +16,8 @@ Bem-vindo à documentação técnica do **SCSI**, um SaaS multi tenant para corr
 | [Variáveis de Ambiente](env-vars.md) | `.env` completo com referência |
 | [Desenvolvimento Local](local-dev.md) | subir o ambiente com Docker Compose |
 | [Deploy](deploy.md) | Deploy com Docker Swarm + Traefik (passo a passo) |
+| [Monitoramento e Observabilidade](monitoring.md) | Stack Prometheus + Grafana + Loki (métricas, logs, alertas) |
+| [MCP (Model Context Protocol)](mcp.md) | Servidor MCP administrativo (CRUD + métricas via IA, auth admin-only) |
 | [Backup e Restore](backup.md) | Estratégia e procedimentos de backup/restore |
 | [Runbook](runbook.md) | Operação, incidentes, logs e monitoramento |
 
@@ -25,5 +27,7 @@ Bem-vindo à documentação técnica do **SCSI**, um SaaS multi tenant para corr
 - **Banco:** PostgreSQL 16
 - **Filas:** Celery + RabbitMQ + Redis
 - **IA:** LangChain + LangGraph + OpenAI
+- **MCP:** servidor administrativo via `django-mcp-server` (CRUD + métricas para agentes de IA)
+- **Observabilidade:** Prometheus + Grafana + Loki (stack opcional, separada)
 - **Frontend:** Bootstrap 5 com Design System customizado
 - **Infra:** Docker + Docker Swarm + Traefik + Let's Encrypt

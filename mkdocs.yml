@@ -36,5 +36,6 @@ nav:
   - Desenvolvimento Local: local-dev.md
   - Deploy: deploy.md
   - Monitoramento e Observabilidade: monitoring.md
+  - MCP (Model Context Protocol): mcp.md
   - Backup e Restore: backup.md
   - Runbook: runbook.md

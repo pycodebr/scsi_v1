@@ -336,3 +336,48 @@ if PROMETHEUS_ENABLED:
     for _db_config in DATABASES.values():
         _engine = _db_config.get('ENGINE', '')
         _db_config['ENGINE'] = _PROMETHEUS_DB_ENGINE_MAP.get(_engine, _engine)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# MCP (Model Context Protocol) — django-mcp-server (stack OPCIONAL)
+# ─────────────────────────────────────────────────────────────────────────────
+# Servidor MCP administrativo do sistema, exposto em /mcp. Só é ATIVADO se as
+# bibliotecas (rest_framework + mcp_server) estiverem instaladas — degradação
+# graciosa: sem elas, o app sobe normalmente e nada de MCP é exposto, logo
+# adicionar o MCP NÃO interfere no deploy existente. Toda a lógica fica em
+# core/mcp.py (ScsiAdminMCPToolset).
+import importlib.util as _importlib_util
+
+MCP_ENABLED = all(
+    _importlib_util.find_spec(_mod) is not None
+    for _mod in ('rest_framework', 'mcp_server')
+)
+
+if MCP_ENABLED:
+    # 'core' é registrado como app para que o autodiscover do mcp_server importe
+    # core/mcp.py e registre o toolset. (core não tem models — sem migrations.)
+    INSTALLED_APPS = INSTALLED_APPS + ['rest_framework', 'mcp_server', 'core']
+
+    # Caminho do endpoint (relativo). Resultado final: /mcp
+    DJANGO_MCP_ENDPOINT = env('DJANGO_MCP_ENDPOINT', default='mcp')
+
+    # Autenticação do MCP: HTTP Basic (DRF). O cliente envia o header
+    #   Authorization: Basic base64(email:senha)
+    # validado contra os usuários do Django (via EmailBackend do projeto). O
+    # acesso ADMIN-ONLY (is_staff/is_superuser) é exigido em CADA tool, dentro
+    # de ScsiAdminMCPToolset._require_admin (ver core/mcp.py).
+    DJANGO_MCP_AUTHENTICATION_CLASSES = [
+        'rest_framework.authentication.BasicAuthentication',
+    ]
+
+    DJANGO_MCP_GLOBAL_SERVER_CONFIG = {
+        'name': env('DJANGO_MCP_SERVER_NAME', default='scsi'),
+        'instructions': (
+            'Servidor MCP administrativo do SCSI. TODAS as tools exigem um '
+            'usuário administrador do Django (is_staff/is_superuser). Oferece '
+            'CRUD completo das entidades do sistema (use list_entities e '
+            'describe_entity para descobrir slugs e campos) e tools de '
+            'métricas/uso do sistema.'
+        ),
+        'stateless': env.bool('DJANGO_MCP_STATELESS', default=True),
+    }

@@ -66,3 +66,9 @@ urlpatterns = [
 # pelo Traefik, então não fica exposto publicamente na internet.
 if getattr(settings, 'PROMETHEUS_ENABLED', False):
     urlpatterns += [path('', include('django_prometheus.urls'))]
+
+# Servidor MCP em /mcp (HTTP Basic auth, admin-only) — habilitado apenas quando
+# as libs do MCP estão instaladas (ver core/settings.py e core/mcp.py). O
+# mcp_server.urls lê DJANGO_MCP_AUTHENTICATION_CLASSES para proteger o endpoint.
+if getattr(settings, 'MCP_ENABLED', False):
+    urlpatterns += [path('', include('mcp_server.urls'))]
