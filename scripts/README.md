@@ -12,6 +12,7 @@ em cada etapa e **tratamento de erro** com motivo, linha e log completo.
 | **Máquina local** (Linux/macOS) | `setup_local.sh`  | Seu PC    | `curl -fsSL https://pycodebr.com.br/setup_local.sh -o setup_local.sh && bash setup_local.sh` |
 | **Máquina local** (Windows)     | `setup_local.ps1` | Seu PC    | `irm https://pycodebr.com.br/setup_local.ps1 \| iex` (PowerShell **Admin**) |
 | **VPS + Deploy completo**       | `setup_deploy.sh` | Servidor  | `curl -fsSL https://pycodebr.com.br/setup_deploy.sh -o setup_deploy.sh && sudo bash setup_deploy.sh` (como **root**) |
+| **VPS · Monitoramento** *(opcional)* | `setup_monitoring.sh` | Servidor (após o deploy) | `bash scripts/setup_monitoring.sh` (como **deploy**, na pasta do projeto) |
 
 O que cada script instala (se faltar): Python 3.13 + venv, Node.js + npm/npx,
 Docker + Compose, **Claude Code**, **OpenCode** e **Codex CLI**, git/curl e o
@@ -178,6 +179,55 @@ código, dentro da pasta do projeto na VPS:
 git pull && ./scripts/deploy.sh          # build + push + deploy
 ./scripts/deploy.sh --skip-build         # só redeploy da stack
 ```
+
+---
+
+## VPS — monitoramento e observabilidade (`setup_monitoring.sh`)
+
+Sobe, **separadamente** e **sem mexer no sistema em produção**, a stack de
+observabilidade: **Prometheus + Grafana + Loki + Promtail + node-exporter +
+cAdvisor**. É **opcional** e roda **depois** que o sistema já está no ar (você já
+rodou o `setup_deploy.sh` e o site abre normalmente). Os deploys ficam separados:
+subir/atualizar a monitoria **não** redeploya o app, e vice-versa.
+
+### Pré-requisitos
+
+- O sistema já publicado (a rede `traefik_public` precisa existir).
+- Um subdomínio para o Grafana (ex.: `grafana.SEU_DOMINIO`) apontando para o IP da VPS.
+
+### Como rodar
+
+Na VPS, **como usuário `deploy`**, dentro da pasta do projeto:
+```bash
+bash scripts/setup_monitoring.sh
+```
+
+### O que o guia faz (passo a passo)
+
+- Confere Docker, Swarm e a rede `traefik_public` (exige o deploy antes).
+- Configura no `.env`: `GRAFANA_DOMAIN`, usuário e **senha do Grafana** (gera uma
+  senha forte se você deixar em branco) e a retenção de métricas/logs.
+- Orienta o **registro DNS** do subdomínio do Grafana (mostra o IP público).
+- Cria a rede `monitoring`, valida os configs e sobe a stack `monitoring`.
+- Já entrega o Grafana com **datasources (Prometheus + Loki) e um dashboard prontos**.
+
+> O endpoint `/metrics` do Django é coletado pela **rede interna** do Swarm —
+> **não** fica exposto na internet. Se o app já estava no ar antes desta
+> atualização, rode um `deploy.sh` para ativá-lo (o alvo `django` aparece como
+> DOWN no Prometheus até lá, sem afetar o site).
+
+### Depois do deploy
+
+Para refazer/atualizar a stack de monitoramento (o papel do `deploy.sh`, mas para
+a monitoria), dentro da pasta do projeto na VPS:
+```bash
+./scripts/deploy_monitoring.sh            # reconcile + rollout dos serviços
+./scripts/deploy_monitoring.sh --clean    # remove e recria do zero (volumes preservados)
+```
+
+Acesse o Grafana em `https://grafana.SEU_DOMINIO` (usuário/senha do `.env`).
+Dashboards extras da comunidade — Grafana › Dashboards › Import › ID: **1860**
+(servidor) e **14282** (containers).
 
 ---
 

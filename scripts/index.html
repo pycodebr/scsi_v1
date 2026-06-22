@@ -393,6 +393,7 @@
       <a href="#local">linux/mac</a>
       <a href="#windows">windows</a>
       <a href="#vps">vps</a>
+      <a href="#monitoria">monitoria</a>
       <a href="#problemas">ajuda</a>
     </nav>
     <button class="toggle" id="themeToggle" aria-label="Alternar tema">◐</button>
@@ -438,7 +439,8 @@
       <a href="#local"><span class="n">03</span> Linux / macOS</a>
       <a href="#windows"><span class="n">04</span> Windows / WSL</a>
       <a href="#vps"><span class="n">05</span> VPS · Deploy</a>
-      <a href="#problemas"><span class="n">06</span> Resolução de problemas</a>
+      <a href="#monitoria"><span class="n">06</span> VPS · Monitoria</a>
+      <a href="#problemas"><span class="n">07</span> Resolução de problemas</a>
     </nav>
   </aside>
 
@@ -448,7 +450,7 @@
     <!-- VISÃO GERAL -->
     <section id="visao" class="reveal">
       <span class="eyebrow">visão geral</span>
-      <h2>Três scripts, do PC ao ar.</h2>
+      <h2>Do PC ao ar — e monitorado.</h2>
       <p>Preparam <strong>do zero</strong> a máquina do aluno para o workflow de IA Assistida (Python 3.13 + Django + Docker + CLIs de IA). Todos são <strong>idempotentes</strong> (pulam o que já está instalado), têm <strong>logs visuais</strong> em cada etapa e <strong>tratamento de erro</strong> com motivo, linha e log completo.</p>
 
       <div class="grid-3">
@@ -469,6 +471,12 @@
           <h4>setup_deploy.sh</h4>
           <div class="where">roda na · VPS (como root)</div>
           <code class="run">curl …/setup_deploy.sh | sudo bash</code>
+        </div>
+        <div class="card">
+          <span class="ic">servidor · opcional</span>
+          <h4>setup_monitoring.sh</h4>
+          <div class="where">roda na · VPS (após o deploy)</div>
+          <code class="run">bash scripts/setup_monitoring.sh</code>
         </div>
       </div>
 
@@ -639,6 +647,42 @@
       </div>
     </section>
 
+    <!-- MONITORIA -->
+    <section id="monitoria" class="reveal">
+      <span class="eyebrow">observabilidade · opcional</span>
+      <h2>VPS — monitoramento e logs (<code>setup_monitoring.sh</code>)</h2>
+      <p>Sobe, <strong>separadamente</strong> e <strong>sem mexer no sistema em produção</strong>, a stack de observabilidade: <strong>Prometheus + Grafana + Loki + Promtail + node-exporter + cAdvisor</strong>. É <strong>opcional</strong> e roda <strong>depois</strong> que o sistema já está no ar. Os deploys ficam separados: subir/atualizar a monitoria <strong>não</strong> redeploya o app, e vice-versa.</p>
+
+      <div class="note cyan"><b>Pré-requisitos:</b> o sistema já publicado (a rede <code>traefik_public</code> precisa existir) e um subdomínio para o Grafana (ex.: <code>grafana.SEU_DOMINIO</code>) apontando para o IP da VPS.</div>
+
+      <h3>Como rodar</h3>
+      <p>Na VPS, <strong>como usuário <code>deploy</code></strong>, dentro da pasta do projeto:</p>
+      <div class="code" data-lang="bash">
+        <div class="code__bar"><span class="code__lang">bash</span><button class="copy">copiar</button></div>
+        <pre><code><span class="tok-f">bash</span> scripts/setup_monitoring.sh</code></pre>
+      </div>
+
+      <h3>O que o guia faz (passo a passo)</h3>
+      <ul class="clean">
+        <li>Confere Docker, Swarm e a rede <code>traefik_public</code> (exige o deploy antes).</li>
+        <li>Configura no <code>.env</code>: <code>GRAFANA_DOMAIN</code>, usuário e <strong>senha do Grafana</strong> (gera uma senha forte se você deixar em branco) e a retenção de métricas/logs.</li>
+        <li>Orienta o <strong>registro DNS</strong> do subdomínio do Grafana (mostra o IP público).</li>
+        <li>Cria a rede <code>monitoring</code>, valida os configs e sobe a stack <code>monitoring</code>.</li>
+        <li>Já entrega o Grafana com <strong>datasources (Prometheus + Loki) e um dashboard prontos</strong>.</li>
+      </ul>
+
+      <div class="note">O endpoint <code>/metrics</code> do Django é coletado pela <b>rede interna</b> do Swarm — <b>não</b> fica exposto na internet. Se o app já estava no ar antes, rode um <code>deploy.sh</code> para ativá-lo (o alvo <code>django</code> fica DOWN no Prometheus até lá, sem afetar o site).</div>
+
+      <h3>Depois do deploy</h3>
+      <p>Para refazer/atualizar a stack de monitoramento (o papel do <code>deploy.sh</code>, mas para a monitoria), dentro da pasta do projeto:</p>
+      <div class="code" data-lang="bash">
+        <div class="code__bar"><span class="code__lang">bash</span><button class="copy">copiar</button></div>
+        <pre><code>./scripts/deploy_monitoring.sh            <span class="tok-c"># reconcile + rollout dos serviços</span>
+./scripts/deploy_monitoring.sh --clean    <span class="tok-c"># remove e recria do zero (volumes preservados)</span></code></pre>
+      </div>
+      <div class="note amber">Acesse o Grafana em <code>https://grafana.SEU_DOMINIO</code> (usuário/senha do <code>.env</code>). Dashboards extras — Grafana › Dashboards › Import › ID: <b>1860</b> (servidor) e <b>14282</b> (containers).</div>
+    </section>
+
     <!-- PROBLEMAS -->
     <section id="problemas" class="reveal">
       <span class="eyebrow">suporte</span>
@@ -676,7 +720,7 @@
 <footer>
   <div class="row">
     <div class="mono">// <b>pycodebr</b> — guia dos scripts de setup</div>
-    <div class="mono">setup_local.sh · setup_local.ps1 · setup_deploy.sh</div>
+    <div class="mono">setup_local.sh · setup_local.ps1 · setup_deploy.sh · setup_monitoring.sh</div>
   </div>
 </footer>
 
