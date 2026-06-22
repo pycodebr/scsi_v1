@@ -12,7 +12,7 @@ em cada etapa e **tratamento de erro** com motivo, linha e log completo.
 | **Máquina local** (Linux/macOS) | `setup_local.sh`  | Seu PC    | `curl -fsSL https://pycodebr.com.br/setup_local.sh -o setup_local.sh && bash setup_local.sh` |
 | **Máquina local** (Windows)     | `setup_local.ps1` | Seu PC    | `irm https://pycodebr.com.br/setup_local.ps1 \| iex` (PowerShell **Admin**) |
 | **VPS + Deploy completo**       | `setup_deploy.sh` | Servidor  | `curl -fsSL https://pycodebr.com.br/setup_deploy.sh -o setup_deploy.sh && sudo bash setup_deploy.sh` (como **root**) |
-| **VPS · Monitoramento** *(opcional)* | `setup_monitoring.sh` | Servidor (após o deploy) | `bash scripts/setup_monitoring.sh` (como **deploy**, na pasta do projeto) |
+| **VPS · Monitoramento** *(opcional)* | `setup_monitoring.sh` | Servidor (após o deploy) | `curl -fsSL https://pycodebr.com.br/setup_monitoring.sh -o setup_monitoring.sh && bash setup_monitoring.sh` (como **deploy**) |
 
 O que cada script instala (se faltar): Python 3.13 + venv, Node.js + npm/npx,
 Docker + Compose, **Claude Code**, **OpenCode** e **Codex CLI**, git/curl e o
@@ -197,7 +197,19 @@ subir/atualizar a monitoria **não** redeploya o app, e vice-versa.
 
 ### Como rodar
 
-Na VPS, **como usuário `deploy`**, dentro da pasta do projeto:
+Na VPS, **como usuário `deploy`** (não precisa de `sudo`). **Comando único**
+(recomendado — baixa e executa):
+```bash
+curl -fsSL https://pycodebr.com.br/setup_monitoring.sh -o setup_monitoring.sh && bash setup_monitoring.sh
+```
+
+> O script é **interativo** e roda sobre o projeto **já clonado** (pelo
+> `setup_deploy.sh`). Se você não estiver dentro da pasta do projeto, ele
+> **pergunta o caminho** (sugere `~/<projeto>`) e segue a partir de lá. Por isso
+> o formato `curl …/setup_monitoring.sh | bash` também funciona — ele redireciona
+> o teclado a partir do `/dev/tty`.
+
+Alternativa, já dentro da pasta do projeto (usa a cópia versionada no repo):
 ```bash
 bash scripts/setup_monitoring.sh
 ```

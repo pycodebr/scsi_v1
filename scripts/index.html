@@ -476,7 +476,7 @@
           <span class="ic">servidor · opcional</span>
           <h4>setup_monitoring.sh</h4>
           <div class="where">roda na · VPS (após o deploy)</div>
-          <code class="run">bash scripts/setup_monitoring.sh</code>
+          <code class="run">curl …/setup_monitoring.sh | bash</code>
         </div>
       </div>
 
@@ -656,11 +656,12 @@
       <div class="note cyan"><b>Pré-requisitos:</b> o sistema já publicado (a rede <code>traefik_public</code> precisa existir) e um subdomínio para o Grafana (ex.: <code>grafana.SEU_DOMINIO</code>) apontando para o IP da VPS.</div>
 
       <h3>Como rodar</h3>
-      <p>Na VPS, <strong>como usuário <code>deploy</code></strong>, dentro da pasta do projeto:</p>
+      <p>Na VPS, <strong>como usuário <code>deploy</code></strong> (sem <code>sudo</code>). <strong>Comando único</strong> (recomendado — baixa e executa):</p>
       <div class="code" data-lang="bash">
         <div class="code__bar"><span class="code__lang">bash</span><button class="copy">copiar</button></div>
-        <pre><code><span class="tok-f">bash</span> scripts/setup_monitoring.sh</code></pre>
+        <pre><code><span class="tok-f">curl</span> -fsSL <span class="tok-u">https://pycodebr.com.br/setup_monitoring.sh</span> -o setup_monitoring.sh &amp;&amp; <span class="tok-f">bash</span> setup_monitoring.sh</code></pre>
       </div>
+      <div class="note cyan">O script é <b>interativo</b> e roda sobre o projeto <b>já clonado</b> (pelo <code>setup_deploy.sh</code>). Se você não estiver dentro da pasta do projeto, ele <b>pergunta o caminho</b> (sugere <code>~/&lt;projeto&gt;</code>) e segue a partir de lá — por isso <code>curl …/setup_monitoring.sh | bash</code> também funciona. Alternativa, dentro da pasta do projeto: <code>bash scripts/setup_monitoring.sh</code>.</div>
 
       <h3>O que o guia faz (passo a passo)</h3>
       <ul class="clean">
