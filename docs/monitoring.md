@@ -160,9 +160,9 @@ Configurado em `monitoring/prometheus/prometheus.yml`:
 
 O que o `django-prometheus` entrega de graça: histograma de latência por
 view/método, contadores de requests por status/método, métricas de queries e
-conexões do banco, cache, migrations e modelos. Os nomes seguem o prefixo
-`PROMETHEUS_METRIC_NAMESPACE` (padrão `scsi`), ex.:
-`scsi_django_http_requests_latency_seconds_by_view_method_bucket`.
+conexões do banco, cache, migrations e modelos. Os nomes **não** têm prefixo de
+namespace — o `django-prometheus` publica as métricas como `django_http_...`,
+ex.: `django_http_requests_latency_seconds_by_view_method_bucket`.
 
 ---
 
@@ -220,7 +220,6 @@ except ImportError:
     PROMETHEUS_ENABLED = False
 
 if PROMETHEUS_ENABLED:
-    PROMETHEUS_METRIC_NAMESPACE = env('PROMETHEUS_METRIC_NAMESPACE', default='scsi')
     INSTALLED_APPS += ['django_prometheus']
     MIDDLEWARE = (['...PrometheusBeforeMiddleware'] + MIDDLEWARE + ['...PrometheusAfterMiddleware'])
     # engine do banco trocada pela versão instrumentada
@@ -286,7 +285,6 @@ GRAFANA_ADMIN_USER=admin
 GRAFANA_ADMIN_PASSWORD=troque-esta-senha-do-grafana
 PROMETHEUS_RETENTION=15d
 LOKI_RETENTION=360h
-PROMETHEUS_METRIC_NAMESPACE=scsi
 MONITORING_CONFIG_DIR=        # preenchido automaticamente pelos scripts
 ```
 
@@ -359,18 +357,16 @@ bash scripts/deploy_monitoring.sh --clean    # remove e recria do zero (dados pr
 | `1860` | Node Exporter Full (host) | ✅ sim (usa métricas `node_*`) |
 | `14282` | Cadvisor exporter (containers) | ✅ sim (usa métricas `container_*`) |
 | `21154` | Docker overview (cAdvisor + node) | ✅ sim |
-| `9528` / `17658` | Django (django-prometheus) | ⚠️ exige ajuste do prefixo `scsi_` (ver nota) |
+| `9528` / `17658` | Django (django-prometheus) | ✅ sim (usa métricas `django_http_*`) |
 
-!!! warning "Cuidado com o prefixo das métricas (namespace) em dashboards de Django"
-    Definimos `PROMETHEUS_METRIC_NAMESPACE=scsi`, então as métricas do Django se
-    chamam `scsi_django_http_...`. Os dashboards de Django da comunidade esperam
-    `django_http_...` (sem prefixo) e por isso aparecem **vazios** ao importar.
-    Opções: (a) use o dashboard **"SCSI — Visão Geral"** já incluso (tem a
-    variável `namespace`); (b) deixe `PROMETHEUS_METRIC_NAMESPACE` vazio para os
-    nomes baterem com a comunidade; ou (c) edite as queries do dashboard
-    importado trocando `django_` por `scsi_django_`. Os dashboards de **infra**
-    (1860, 14282) não têm esse problema — usam nomes padrão (`node_*`,
-    `container_*`).
+!!! note "Nome das métricas do Django (sem prefixo de namespace)"
+    O `django-prometheus` publica as métricas do Django **sem prefixo de
+    namespace** — elas chegam ao Prometheus como `django_http_...` (ex.:
+    `django_http_requests_latency_seconds_by_view_method_bucket`). É por isso que
+    o dashboard **"SCSI — Visão Geral"** já incluso e os dashboards de Django da
+    comunidade (9528, 17658) usam exatamente esses nomes, sem necessidade de
+    ajustar prefixo. Os dashboards de **infra** (1860, 14282) usam nomes padrão
+    de exporters (`node_*`, `container_*`).
 
 ---
 
@@ -393,7 +389,7 @@ Alertmanager (não incluso nesta stack enxuta).
 
 | SLI | Medida (PromQL) | SLO |
 |-----|------------------|-----|
-| Latência P95 | `histogram_quantile(0.95, rate(scsi_django_http_requests_latency_seconds_by_view_method_bucket[5m]))` | < 2s |
+| Latência P95 | `histogram_quantile(0.95, rate(django_http_requests_latency_seconds_by_view_method_bucket[5m]))` | < 2s |
 | Disponibilidade | `1 - (5xx / total)` | > 99,5% |
 | Erros 5xx | `rate(...status=~"5..")/rate(...total)` | < 0,5% |
 
@@ -442,7 +438,7 @@ Alertmanager (não incluso nesta stack enxuta).
 | Alvo `django` **DOWN** com `Get "https://localhost/metrics": ... connect: connection refused` (e painéis do app em "no data") | `SECURE_SSL_REDIRECT=True` responde **301** redirecionando o scrape (HTTP, porta 8000) para `https://…/metrics`; o Prometheus segue o redirect e bate na porta 443 (inexistente dentro do container) | isente o `/metrics` do redirect, junto do `/health/`: `SECURE_REDIRECT_EXEMPT = [r'^health/$', r'^metrics$']` em `core/settings.py` (bloco `if not DEBUG:`). Rebuilde a imagem (`bash scripts/deploy.sh`). Complementa o `MetricsHostMiddleware`: um mata o **400 DisallowedHost**, o outro o **301 redirect** |
 | Sem logs no Loki | Promtail sem acesso ao socket do Docker | confira `docker service logs monitoring_promtail` |
 | `monitoring-stack.yml` falha no deploy | `MONITORING_CONFIG_DIR` vazio | rode pelos scripts (eles preenchem) |
-| Painéis vazios | namespace diferente de `scsi` | ajuste a variável `namespace` no dashboard |
+| Painéis do app vazios ao importar dashboard da comunidade | queries com prefixo errado (ex.: `scsi_django_http_...`) | as métricas do Django **não** têm prefixo: use `django_http_...` direto nas queries |
 
 Comandos úteis:
 

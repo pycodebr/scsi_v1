@@ -53,13 +53,13 @@ groups:
   - name: scsi_app
     rules:
       # Taxa de erros 5xx do Django acima de 5% das respostas (5 min).
-      # Métrica do django-prometheus; o prefixo segue PROMETHEUS_METRIC_NAMESPACE
-      # (padrão "scsi"). Ajuste o prefixo se mudar o namespace no settings.py.
+      # Métrica do django-prometheus; ela é publicada SEM prefixo de namespace,
+      # então o nome é `django_http_...` (não `scsi_django_http_...`).
       - alert: HighDjango5xxRate
         expr: |
-          sum(rate(scsi_django_http_responses_total_by_status_total{status=~"5.."}[5m]))
+          sum(rate(django_http_responses_total_by_status_total{status=~"5.."}[5m]))
           /
-          sum(rate(scsi_django_http_responses_total_by_status_total[5m])) > 0.05
+          sum(rate(django_http_responses_total_by_status_total[5m])) > 0.05
         for: 5m
         labels:
           severity: critical
@@ -72,7 +72,7 @@ groups:
         expr: |
           histogram_quantile(
             0.95,
-            sum(rate(scsi_django_http_requests_latency_seconds_by_view_method_bucket[5m])) by (le)
+            sum(rate(django_http_requests_latency_seconds_by_view_method_bucket[5m])) by (le)
           ) > 2
         for: 5m
         labels:

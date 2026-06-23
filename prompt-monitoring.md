@@ -88,7 +88,9 @@ Defina e ANOTE estas variáveis de descoberta (usadas no restante da entrega):
 - `APP_SERVICE` = serviço web (geralmente `app`) → alvo `tasks.${STACK}_app`
 - `APP_PORT` = porta do gunicorn (geralmente `8000`)
 - `DJANGO_PKG` = pacote com `settings.py`/`urls.py` (ex.: `core`)
-- `NAMESPACE` = prefixo das métricas (sugestão: nome curto do projeto)
+- `NAMESPACE` = nome curto do projeto (usado só para nomear arquivos/dashboards,
+  ex.: `<NAMESPACE>-overview.json` — NÃO é prefixo de métrica; o django-prometheus
+  publica `django_http_...` sem prefixo)
 NUNCA presuma esses nomes — confirme no código.
 </discovery_first>
 
@@ -129,7 +131,9 @@ except ImportError:
     PROMETHEUS_ENABLED = False
 
 if PROMETHEUS_ENABLED:
-    PROMETHEUS_METRIC_NAMESPACE = env('PROMETHEUS_METRIC_NAMESPACE', default='${NAMESPACE}')
+    # IMPORTANTE: o django-prometheus NÃO prefixa as métricas com namespace — elas
+    # saem como `django_http_...` (sem prefixo). Não configure um namespace e use
+    # `django_http_...` direto nas queries/dashboards/alertas.
     # O Prometheus coleta /metrics pela rede interna do Swarm, conectando direto no IP
     # do container (ex.: 10.0.1.18) — logo o header Host é esse IP, fora do ALLOWED_HOSTS,
     # causando DisallowedHost (400) e deixando os painéis em "no data". Como /metrics não
@@ -391,15 +395,15 @@ groups:
     rules:
       - alert: HighDjango5xxRate
         expr: |
-          sum(rate(${NAMESPACE}_django_http_responses_total_by_status_total{status=~"5.."}[5m]))
-          / sum(rate(${NAMESPACE}_django_http_responses_total_by_status_total[5m])) > 0.05
+          sum(rate(django_http_responses_total_by_status_total{status=~"5.."}[5m]))
+          / sum(rate(django_http_responses_total_by_status_total[5m])) > 0.05
         for: 5m
         labels: { severity: critical }
         annotations: { summary: "Erros 5xx do Django acima de 5%" }
       - alert: HighDjangoLatencyP95
         expr: |
           histogram_quantile(0.95,
-            sum(rate(${NAMESPACE}_django_http_requests_latency_seconds_by_view_method_bucket[5m])) by (le)) > 2
+            sum(rate(django_http_requests_latency_seconds_by_view_method_bucket[5m])) by (le)) > 2
         for: 5m
         labels: { severity: warning }
         annotations: { summary: "Latência P95 do Django acima de 2s" }
@@ -475,31 +479,27 @@ providers:
     options: { path: /var/lib/grafana/dashboards, foldersFromFilesStructure: false }
 ```
 
-**`monitoring/grafana/dashboards/<NAMESPACE>-overview.json`** — dashboard próprio,
-reutilizável via variável de template `namespace`. NÃO precisa colar um JSON
-gigante: gere um dashboard com `schemaVersion: 39`, `uid` próprio, datasources por
-uid (`prometheus`/`loki`) e os painéis abaixo (cada um com sua query):
+**`monitoring/grafana/dashboards/<NAMESPACE>-overview.json`** — dashboard próprio.
+As métricas do Django chegam SEM prefixo (`django_http_...`), então use esses
+nomes direto nas queries (sem variável de template de namespace). NÃO precisa colar
+um JSON gigante: gere um dashboard com `schemaVersion: 39`, `uid` próprio,
+datasources por uid (`prometheus`/`loki`) e os painéis abaixo (cada um com sua query):
 
 | Painel | Tipo | Query |
 |--------|------|-------|
 | Alvos UP | stat | `count(up == 1)` |
-| Taxa de erros 5xx (%) | stat | `100 * sum(rate(${namespace}_django_http_responses_total_by_status_total{status=~"5.."}[5m])) / clamp_min(sum(rate(${namespace}_django_http_responses_total_by_status_total[5m])),1)` |
-| Throughput (req/s) | stat | `sum(rate(${namespace}_django_http_requests_total_by_method_total[5m]))` |
-| Requisições por método | timeseries | `sum(rate(${namespace}_django_http_requests_total_by_method_total[5m])) by (method)` |
-| Respostas por status | timeseries (stack) | `sum(rate(${namespace}_django_http_responses_total_by_status_total[5m])) by (status)` |
-| Latência p50/p95/p99 | timeseries | `histogram_quantile(0.95, sum(rate(${namespace}_django_http_requests_latency_seconds_by_view_method_bucket[5m])) by (le))` (repita 0.50/0.99) |
+| Taxa de erros 5xx (%) | stat | `100 * sum(rate(django_http_responses_total_by_status_total{status=~"5.."}[5m])) / clamp_min(sum(rate(django_http_responses_total_by_status_total[5m])),1)` |
+| Throughput (req/s) | stat | `sum(rate(django_http_requests_total_by_method_total[5m]))` |
+| Requisições por método | timeseries | `sum(rate(django_http_requests_total_by_method_total[5m])) by (method)` |
+| Respostas por status | timeseries (stack) | `sum(rate(django_http_responses_total_by_status_total[5m])) by (status)` |
+| Latência p50/p95/p99 | timeseries | `histogram_quantile(0.95, sum(rate(django_http_requests_latency_seconds_by_view_method_bucket[5m])) by (le))` (repita 0.50/0.99) |
 | Memória por container | timeseries (bytes) | `sum(container_memory_usage_bytes{name=~".+"}) by (name)` |
 | CPU por container | timeseries (percentunit) | `sum(rate(container_cpu_usage_seconds_total{name=~".+"}[5m])) by (name)` |
 | Logs da aplicação | logs (datasource loki) | `{stack="${STACK}"} |= ``` |
 
-A variável de template (deixa o JSON portátil entre projetos):
-
-```json
-"templating": { "list": [
-  { "type": "constant", "name": "namespace", "label": "Namespace de métricas",
-    "query": "${NAMESPACE}", "current": { "text": "${NAMESPACE}", "value": "${NAMESPACE}" } }
-]}
-```
+Mantenha `"templating": { "list": [] }` — as métricas do Django não têm prefixo de
+namespace, então as queries usam `django_http_...` diretamente e não há variável a
+parametrizar.
 
 ### 4. Scripts em `scripts/` (MESMO estilo dos existentes)
 
@@ -513,8 +513,7 @@ helpers do `setup_deploy.sh` (cores, `step`, `info/ok/warn`, `action_box`,
 3. Ler o `DOMAIN` do `.env`.
 4. Configurar no `.env`: `GRAFANA_DOMAIN` (default `grafana.<DOMAIN>`),
    `GRAFANA_ADMIN_USER`, `GRAFANA_ADMIN_PASSWORD` (gerar forte se vazia).
-5. Garantir defaults: `PROMETHEUS_RETENTION`, `LOKI_RETENTION`,
-   `PROMETHEUS_METRIC_NAMESPACE`.
+5. Garantir defaults: `PROMETHEUS_RETENTION`, `LOKI_RETENTION`.
 6. Orientar o registro DNS do subdomínio do Grafana (mostrar o IP público).
 7. Criar a rede `monitoring` (idempotente).
 8. Validar a presença de todos os configs; gravar `MONITORING_CONFIG_DIR` (path
@@ -571,7 +570,6 @@ GRAFANA_ADMIN_USER=admin
 GRAFANA_ADMIN_PASSWORD=troque-esta-senha-do-grafana
 PROMETHEUS_RETENTION=15d
 LOKI_RETENTION=360h                  # múltiplo de 24h (360h = 15 dias)
-PROMETHEUS_METRIC_NAMESPACE=${NAMESPACE}
 MONITORING_CONFIG_DIR=               # preenchido automaticamente pelos scripts
 ```
 
@@ -610,14 +608,14 @@ Recomendados (IDs verificados; INFRA funciona direto, pois usa nomes padrão):
 | 14282 | Cadvisor exporter | métricas por container — funciona direto |
 | 21154 | Docker overview (cAdvisor 2024) | cAdvisor + node — funciona direto |
 | 13496 | Docker and system monitoring | alternativa enxuta |
-| 9528 / 17658 | Django (django-prometheus) | exige ajuste do prefixo (ver abaixo) |
+| 9528 / 17658 | Django (django-prometheus) | funciona direto (`django_http_*`) |
 
-ARMADILHA do namespace (explique sempre): como definimos
-`PROMETHEUS_METRIC_NAMESPACE=${NAMESPACE}`, as métricas viram
-`${NAMESPACE}_django_http_...`. Dashboards de Django da comunidade esperam
-`django_http_...` e aparecem VAZIOS ao importar. Saídas: (a) use o dashboard
-próprio (tem a variável `namespace`); (b) deixe o namespace vazio no `.env`;
-(c) edite as queries trocando `django_` por `${NAMESPACE}_django_`.
+NOME das métricas do Django (explique sempre): o django-prometheus publica as
+métricas SEM prefixo de namespace — elas chegam como `django_http_...`. Por isso
+o dashboard próprio e os dashboards de Django da comunidade (9528, 17658) usam
+esses nomes direto, sem ajuste de prefixo. Se algum painel vier VAZIO, confira se
+a query não tem um prefixo indevido (ex.: `${NAMESPACE}_django_http_...`) — o
+correto é `django_http_...`.
 </dashboards>
 
 <implementation_rules>

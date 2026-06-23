@@ -89,7 +89,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "100 * sum(rate(${namespace}_django_http_responses_total_by_status_total{status=~\"5..\"}[5m])) / clamp_min(sum(rate(${namespace}_django_http_responses_total_by_status_total[5m])), 1)",
+          "expr": "100 * sum(rate(django_http_responses_total_by_status_total{status=~\"5..\"}[5m])) / clamp_min(sum(rate(django_http_responses_total_by_status_total[5m])), 1)",
           "legendFormat": "Erros 5xx %",
           "refId": "A"
         }
@@ -126,7 +126,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "sum(rate(${namespace}_django_http_requests_total_by_method_total[5m]))",
+          "expr": "sum(rate(django_http_requests_total_by_method_total[5m]))",
           "legendFormat": "req/s",
           "refId": "A"
         }
@@ -169,7 +169,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "sum(rate(${namespace}_django_http_requests_total_by_method_total[5m])) by (method)",
+          "expr": "sum(rate(django_http_requests_total_by_method_total[5m])) by (method)",
           "legendFormat": "{{method}}",
           "refId": "A"
         }
@@ -211,7 +211,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "sum(rate(${namespace}_django_http_responses_total_by_status_total[5m])) by (status)",
+          "expr": "sum(rate(django_http_responses_total_by_status_total[5m])) by (status)",
           "legendFormat": "{{status}}",
           "refId": "A"
         }
@@ -253,19 +253,19 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "histogram_quantile(0.50, sum(rate(${namespace}_django_http_requests_latency_seconds_by_view_method_bucket[5m])) by (le))",
+          "expr": "histogram_quantile(0.50, sum(rate(django_http_requests_latency_seconds_by_view_method_bucket[5m])) by (le))",
           "legendFormat": "p50",
           "refId": "A"
         },
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "histogram_quantile(0.95, sum(rate(${namespace}_django_http_requests_latency_seconds_by_view_method_bucket[5m])) by (le))",
+          "expr": "histogram_quantile(0.95, sum(rate(django_http_requests_latency_seconds_by_view_method_bucket[5m])) by (le))",
           "legendFormat": "p95",
           "refId": "B"
         },
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "histogram_quantile(0.99, sum(rate(${namespace}_django_http_requests_latency_seconds_by_view_method_bucket[5m])) by (le))",
+          "expr": "histogram_quantile(0.99, sum(rate(django_http_requests_latency_seconds_by_view_method_bucket[5m])) by (le))",
           "legendFormat": "p99",
           "refId": "C"
         }
@@ -387,18 +387,7 @@
   "schemaVersion": 39,
   "tags": ["scsi", "django", "overview"],
   "templating": {
-    "list": [
-      {
-        "current": { "selected": false, "text": "scsi", "value": "scsi" },
-        "description": "Prefixo (namespace) das métricas do django-prometheus (PROMETHEUS_METRIC_NAMESPACE).",
-        "hide": 0,
-        "label": "Namespace de métricas",
-        "name": "namespace",
-        "query": "scsi",
-        "skipUrlSync": false,
-        "type": "constant"
-      }
-    ]
+    "list": []
   },
   "time": { "from": "now-6h", "to": "now" },
   "timepicker": {},
