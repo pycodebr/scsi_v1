@@ -83,8 +83,11 @@ interno passar). `CSRF_TRUSTED_ORIGINS=https://{{DOMINIO}},https://*.{{DOMINIO}}
 (sempre com esquema; suporte a wildcard). Em ALLOWED_HOSTS vai só o hostname.
 - Em produção (DEBUG=False), como o TLS termina no Traefik e o app recebe HTTP
 interno, configurar `SECURE_PROXY_SSL_HEADER=('HTTP_X_FORWARDED_PROTO','https')`
-(evita loop de redirect) e isentar a rota de healthcheck do redirect HTTPS com
-`SECURE_REDIRECT_EXEMPT`. Habilitar HSTS, cookies seguros, nosniff, etc.
+(evita loop de redirect) e isentar do redirect HTTPS, via `SECURE_REDIRECT_EXEMPT`,
+as rotas batidas por HTTP interno (sem passar pelo Traefik): o healthcheck e — se
+houver stack de monitoramento — o `/metrics` do Prometheus (senão o scrape leva
+301 p/ https e falha na 443: `SECURE_REDIRECT_EXEMPT = [r'^health/$', r'^metrics$']`).
+Habilitar HSTS, cookies seguros, nosniff, etc.
 - Segredos sensíveis (senha de banco/broker, token Cloudflare) preferir Docker
 Secrets e/ou o `.env` gitignored da VPS — nunca versionados.
 

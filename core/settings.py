@@ -237,8 +237,11 @@ if not DEBUG:
 
     SECURE_SSL_REDIRECT = env.bool('SECURE_SSL_REDIRECT', default=True)
     # O healthcheck do container/load balancer bate em http://localhost:8000/health/
-    # (sem passar pelo Traefik), então precisa ficar isento do redirect p/ HTTPS.
-    SECURE_REDIRECT_EXEMPT = [r'^health/$']
+    # e o Prometheus coleta http://<task-ip>:8000/metrics — ambos por HTTP interno,
+    # sem passar pelo Traefik. Sem isenção, o SECURE_SSL_REDIRECT responde 301 p/
+    # https://.../metrics e o scrape morre (connection refused na 443 dentro do
+    # container), deixando os painéis scsi_django_* em "no data".
+    SECURE_REDIRECT_EXEMPT = [r'^health/$', r'^metrics$']
 
     SECURE_HSTS_SECONDS = env.int('SECURE_HSTS_SECONDS', default=31536000)
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
@@ -300,16 +303,12 @@ LOGGING = {
 #   - métricas de cache, migrations e modelos.
 # O Prometheus coleta esse /metrics pela rede overlay interna do Swarm; o
 # endpoint NÃO é publicado pelo Traefik (ver monitoring/prometheus/prometheus.yml).
-# try:
-#     import django_prometheus  # noqa: F401
+try:
+    import django_prometheus  # noqa: F401
 
-#     PROMETHEUS_ENABLED = True
-# except ImportError:
-#     PROMETHEUS_ENABLED = False
-
-import django_prometheus  # noqa: F401
-
-PROMETHEUS_ENABLED = True
+    PROMETHEUS_ENABLED = True
+except ImportError:
+    PROMETHEUS_ENABLED = False
 
 if PROMETHEUS_ENABLED:
     # Prefixo das métricas (ex.: scsi_django_http_requests_total). Mantenha igual

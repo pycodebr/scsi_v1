@@ -137,6 +137,12 @@ if PROMETHEUS_ENABLED:
     # reescreve o Host só dessa rota. PRIMEIRO middleware, antes do SecurityMiddleware.
     if '${DJANGO_PKG}.middleware.MetricsHostMiddleware' not in MIDDLEWARE:
         MIDDLEWARE = ['${DJANGO_PKG}.middleware.MetricsHostMiddleware'] + MIDDLEWARE
+    # ATENÇÃO (2º gotcha, além do Host): se a app roda atrás de proxy TLS com
+    # SECURE_SSL_REDIRECT=True, o /metrics (scrape em HTTP na porta interna) leva
+    # 301 -> https://.../metrics e o Prometheus falha na 443 dentro do container
+    # ("connection refused" / alvo DOWN). Isente o /metrics do redirect JUNTO da
+    # rota de healthcheck, no bloco de segurança (if not DEBUG):
+    #     SECURE_REDIRECT_EXEMPT = [r'^health/$', r'^metrics$']
     if 'django_prometheus' not in INSTALLED_APPS:
         INSTALLED_APPS = INSTALLED_APPS + ['django_prometheus']
     # Before = PRIMEIRO middleware; After = ÚLTIMO. Medem o tempo TOTAL da request.
@@ -575,9 +581,13 @@ Crie uma página em `docs/` (registre no `mkdocs.yml`/nav, se existir) cobrindo:
 o que foi implementado e por quê; tabela de componentes; **diagramas Mermaid**
 (arquitetura, fluxo de métricas em `sequenceDiagram`, fluxo de logs, sequência de
 deploy em `flowchart`); tabela de alertas; SLIs/SLOs; casos de uso;
-troubleshooting (inclua o caso `/metrics` retornar **400 + DisallowedHost** —
-scrape pelo IP interno do container fora do `ALLOWED_HOSTS`, já tratado no bloco
-`if PROMETHEUS_ENABLED:`); e a seção de dashboards (item <dashboards>).
+troubleshooting (inclua os DOIS gotchas do scrape de `/metrics`, ambos deixam os
+painéis do app em "no data": (a) **400 + DisallowedHost** — scrape pelo IP interno
+do container fora do `ALLOWED_HOSTS`, tratado pelo `MetricsHostMiddleware`; (b)
+alvo **DOWN** com `301`/`connection refused na 443` — `SECURE_SSL_REDIRECT`
+redireciona o `/metrics` (HTTP) p/ https, resolvido isentando a rota em
+`SECURE_REDIRECT_EXEMPT = [r'^health/$', r'^metrics$']`); e a seção de dashboards
+(item <dashboards>).
 </deliverables>
 
 <dashboards>
