@@ -300,12 +300,16 @@ LOGGING = {
 #   - métricas de cache, migrations e modelos.
 # O Prometheus coleta esse /metrics pela rede overlay interna do Swarm; o
 # endpoint NÃO é publicado pelo Traefik (ver monitoring/prometheus/prometheus.yml).
-try:
-    import django_prometheus  # noqa: F401
+# try:
+#     import django_prometheus  # noqa: F401
 
-    PROMETHEUS_ENABLED = True
-except ImportError:
-    PROMETHEUS_ENABLED = False
+#     PROMETHEUS_ENABLED = True
+# except ImportError:
+#     PROMETHEUS_ENABLED = False
+
+import django_prometheus  # noqa: F401
+
+PROMETHEUS_ENABLED = True
 
 if PROMETHEUS_ENABLED:
     # Prefixo das métricas (ex.: scsi_django_http_requests_total). Mantenha igual
