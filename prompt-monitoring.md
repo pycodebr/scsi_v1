@@ -130,6 +130,19 @@ except ImportError:
 
 if PROMETHEUS_ENABLED:
     PROMETHEUS_METRIC_NAMESPACE = env('PROMETHEUS_METRIC_NAMESPACE', default='${NAMESPACE}')
+    # O Prometheus coleta /metrics via DNS do Swarm (tasks.<serviço>), que resolve
+    # para o IP interno de CADA réplica. Como ele conecta pelo IP, o header Host vira
+    # esse IP (ex.: 10.0.1.18) — fora do ALLOWED_HOSTS, causando DisallowedHost (400).
+    # Cada container libera só o(s) seu(s) próprio(s) IP(s); nada externo é exposto e
+    # o IP dinâmico (muda a cada réplica/redeploy) deixa de ser problema.
+    import socket
+    try:
+        _hostname = socket.gethostname()
+        for _ip in socket.gethostbyname_ex(_hostname)[2] + [socket.gethostbyname(_hostname)]:
+            if _ip not in ALLOWED_HOSTS:
+                ALLOWED_HOSTS.append(_ip)
+    except socket.error:
+        pass
     if 'django_prometheus' not in INSTALLED_APPS:
         INSTALLED_APPS = INSTALLED_APPS + ['django_prometheus']
     # Before = PRIMEIRO middleware; After = ÚLTIMO. Medem o tempo TOTAL da request.
@@ -547,7 +560,9 @@ Crie uma página em `docs/` (registre no `mkdocs.yml`/nav, se existir) cobrindo:
 o que foi implementado e por quê; tabela de componentes; **diagramas Mermaid**
 (arquitetura, fluxo de métricas em `sequenceDiagram`, fluxo de logs, sequência de
 deploy em `flowchart`); tabela de alertas; SLIs/SLOs; casos de uso;
-troubleshooting; e a seção de dashboards (item <dashboards>).
+troubleshooting (inclua o caso `/metrics` retornar **400 + DisallowedHost** —
+scrape pelo IP interno do container fora do `ALLOWED_HOSTS`, já tratado no bloco
+`if PROMETHEUS_ENABLED:`); e a seção de dashboards (item <dashboards>).
 </deliverables>
 
 <dashboards>
