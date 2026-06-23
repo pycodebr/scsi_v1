@@ -55,7 +55,6 @@ scrape_configs:
   #     - "--metrics.prometheus.addEntryPointsLabels=true"
   #     - "--metrics.prometheus.addServicesLabels=true"
   #  e então descomente o bloco abaixo (o serviço vira "scsi_v1_traefik:8080"):
-  #
-  # - job_name: "traefik"
-  #   static_configs:
-  #     - targets: ["scsi_v1_traefik:8080"]
+  - job_name: "traefik"
+    static_configs:
+      - targets: ["scsi_v1_traefik:8080"]

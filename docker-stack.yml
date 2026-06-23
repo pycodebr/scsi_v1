@@ -38,6 +38,11 @@ services:
       - "--log.level=INFO"
       - "--accesslog=true"
       - "--accesslog.format=json"
+
+      # Métricas Prometheus
+      - "--metrics.prometheus=true"
+      - "--metrics.prometheus.addEntryPointsLabels=true"
+      - "--metrics.prometheus.addServicesLabels=true"
     environment:
       # Token lido do secret via convenção _FILE (lego/Traefik leem o arquivo).
       CF_DNS_API_TOKEN_FILE: /run/secrets/CLOUDFLARE_DNS_API_TOKEN
