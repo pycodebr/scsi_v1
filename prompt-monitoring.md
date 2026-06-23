@@ -130,19 +130,13 @@ except ImportError:
 
 if PROMETHEUS_ENABLED:
     PROMETHEUS_METRIC_NAMESPACE = env('PROMETHEUS_METRIC_NAMESPACE', default='${NAMESPACE}')
-    # O Prometheus coleta /metrics via DNS do Swarm (tasks.<serviço>), que resolve
-    # para o IP interno de CADA réplica. Como ele conecta pelo IP, o header Host vira
-    # esse IP (ex.: 10.0.1.18) — fora do ALLOWED_HOSTS, causando DisallowedHost (400).
-    # Cada container libera só o(s) seu(s) próprio(s) IP(s); nada externo é exposto e
-    # o IP dinâmico (muda a cada réplica/redeploy) deixa de ser problema.
-    import socket
-    try:
-        _hostname = socket.gethostname()
-        for _ip in socket.gethostbyname_ex(_hostname)[2] + [socket.gethostbyname(_hostname)]:
-            if _ip not in ALLOWED_HOSTS:
-                ALLOWED_HOSTS.append(_ip)
-    except socket.error:
-        pass
+    # O Prometheus coleta /metrics pela rede interna do Swarm, conectando direto no IP
+    # do container (ex.: 10.0.1.18) — logo o header Host é esse IP, fora do ALLOWED_HOSTS,
+    # causando DisallowedHost (400) e deixando os painéis em "no data". Como /metrics não
+    # é público (não passa pelo Traefik), o MetricsHostMiddleware (ver ${DJANGO_PKG}/middleware.py)
+    # reescreve o Host só dessa rota. PRIMEIRO middleware, antes do SecurityMiddleware.
+    if '${DJANGO_PKG}.middleware.MetricsHostMiddleware' not in MIDDLEWARE:
+        MIDDLEWARE = ['${DJANGO_PKG}.middleware.MetricsHostMiddleware'] + MIDDLEWARE
     if 'django_prometheus' not in INSTALLED_APPS:
         INSTALLED_APPS = INSTALLED_APPS + ['django_prometheus']
     # Before = PRIMEIRO middleware; After = ÚLTIMO. Medem o tempo TOTAL da request.
@@ -162,6 +156,27 @@ if PROMETHEUS_ENABLED:
     for _db_config in DATABASES.values():
         _engine = _db_config.get('ENGINE', '')
         _db_config['ENGINE'] = _PROMETHEUS_DB_ENGINE_MAP.get(_engine, _engine)
+```
+
+**`${DJANGO_PKG}/middleware.py`** — crie (referenciado no bloco acima):
+
+```python
+class MetricsHostMiddleware:
+    """Libera o scrape do /metrics sem afrouxar o ALLOWED_HOSTS das rotas públicas.
+
+    O Prometheus coleta /metrics conectando direto no IP do container, então o header
+    Host é esse IP (dinâmico, fora do ALLOWED_HOSTS) -> Django responde 400 DisallowedHost
+    e nunca expõe as métricas. Como /metrics não é público (não passa pelo Traefik),
+    reescrevemos o Host APENAS dessa rota para um valor permitido. PRIMEIRO middleware.
+    """
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        if request.path == '/metrics':
+            request.META['HTTP_HOST'] = 'localhost'
+        return self.get_response(request)
 ```
 
 **`${DJANGO_PKG}/urls.py`** — importe `settings` e adicione ao final:

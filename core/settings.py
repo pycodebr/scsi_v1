@@ -312,23 +312,14 @@ if PROMETHEUS_ENABLED:
     # ao usado nos dashboards e alertas do Grafana/Prometheus.
     PROMETHEUS_METRIC_NAMESPACE = env('PROMETHEUS_METRIC_NAMESPACE', default='scsi')
 
-    # O Prometheus coleta /metrics via DNS do Swarm (tasks.<serviço>), que resolve
-    # para o IP interno de CADA réplica. Como ele conecta pelo IP, o header Host da
-    # requisição é esse IP (ex.: 10.0.1.18) — que não está no ALLOWED_HOSTS e causaria
-    # DisallowedHost (HTTP 400). Aqui cada container libera apenas o(s) seu(s) próprio(s)
-    # IP(s) interno(s); nada externo é exposto e o IP dinâmico deixa de ser problema.
-    import socket
-
-    try:
-        _hostname = socket.gethostname()
-        _own_ips = socket.gethostbyname_ex(_hostname)[2] + [
-            socket.gethostbyname(_hostname)
-        ]
-        for _ip in _own_ips:
-            if _ip not in ALLOWED_HOSTS:
-                ALLOWED_HOSTS.append(_ip)
-    except socket.error:
-        pass
+    # O Prometheus coleta /metrics pela rede interna do Swarm, conectando direto no
+    # IP do container (ex.: 10.0.1.18) — logo o header Host é esse IP, fora do
+    # ALLOWED_HOSTS, causando DisallowedHost (HTTP 400). Como /metrics não é público
+    # (não passa pelo Traefik), o MetricsHostMiddleware reescreve o Host APENAS dessa
+    # rota para um valor permitido. Precisa ser o PRIMEIRO middleware, antes do
+    # SecurityMiddleware (que é quem dispara o DisallowedHost).
+    if 'core.middleware.MetricsHostMiddleware' not in MIDDLEWARE:
+        MIDDLEWARE = ['core.middleware.MetricsHostMiddleware'] + MIDDLEWARE
 
     # `django_prometheus` precisa estar no INSTALLED_APPS para registrar métricas.
     if 'django_prometheus' not in INSTALLED_APPS:

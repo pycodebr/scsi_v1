@@ -438,7 +438,7 @@ Alertmanager (não incluso nesta stack enxuta).
 |---------|----------------|------|
 | Grafana não abre | DNS do subdomínio ainda não propagou; TLS validando | aguarde 1-2 min; confira o registro A |
 | Alvo `django` DOWN | app ainda sem `/metrics` | rode `bash scripts/deploy.sh` |
-| `/metrics` retorna **400** + `DisallowedHost` no log | Prometheus faz scrape pelo **IP interno** do container (`tasks.<serviço>` resolve para o IP de cada réplica), e esse IP não está em `ALLOWED_HOSTS` | já tratado no `core/settings.py`: dentro do bloco `if PROMETHEUS_ENABLED:` cada container libera o próprio IP interno. Garanta que a imagem foi rebuildada (`bash scripts/deploy.sh`). **Não** adicione o IP no `.env` — ele muda a cada réplica/redeploy |
+| `/metrics` retorna **400** + `DisallowedHost` no log (e painéis do app em "no data") | Prometheus faz scrape conectando no **IP interno** do container, então o header `Host` é esse IP — fora do `ALLOWED_HOSTS` | já tratado pelo `core/middleware.py::MetricsHostMiddleware` (ligado no bloco `if PROMETHEUS_ENABLED:`), que reescreve o `Host` só da rota `/metrics`. Garanta que a imagem foi rebuildada (`bash scripts/deploy.sh`). **Não** adicione o IP no `.env` — é dinâmico (muda por réplica/rede/redeploy) |
 | Sem logs no Loki | Promtail sem acesso ao socket do Docker | confira `docker service logs monitoring_promtail` |
 | `monitoring-stack.yml` falha no deploy | `MONITORING_CONFIG_DIR` vazio | rode pelos scripts (eles preenchem) |
 | Painéis vazios | namespace diferente de `scsi` | ajuste a variável `namespace` no dashboard |
