@@ -286,7 +286,7 @@ monitoring/
 | Script | Papel | Equivalente do app |
 |--------|-------|--------------------|
 | `scripts/setup_monitoring.sh` | Guia **passo a passo** para subir a monitoria (1ª vez) | `setup_deploy.sh` |
-| `scripts/deploy_monitoring.sh` | Refaz o deploy da monitoria (reconcile / `--clean`) | `deploy.sh` |
+| `scripts/deploy_monitoring.sh` | `git pull` + refaz o deploy da monitoria (reconcile / `--clean`) | `deploy.sh` |
 
 ### 5.6 Variáveis no `.env`
 
@@ -356,9 +356,15 @@ cria a rede, valida os configs e sobe a stack — pausando e explicando cada eta
 ### Redeploy da monitoria
 
 ```bash
-bash scripts/deploy_monitoring.sh            # reconcile + rollout
+bash scripts/deploy_monitoring.sh            # git pull + reconcile + rollout
 bash scripts/deploy_monitoring.sh --clean    # remove e recria do zero (dados preservados)
+SKIP_GIT_PULL=1 bash scripts/deploy_monitoring.sh   # pula o git pull (usa os arquivos atuais)
 ```
+
+!!! tip "O `deploy_monitoring.sh` agora dá `git pull` antes do deploy"
+    Garante que o `monitoring-stack.yml` e os configs da VPS estão na última versão
+    antes de reconciliar a stack (ex.: ao adicionar um serviço novo como o
+    `grafana-mcp`). É `--ff-only` e **não aborta** se falhar — apenas avisa e segue.
 
 ### Acessar
 
@@ -570,6 +576,12 @@ printf 'mcpuser:uma-senha-forte' | base64
 # -> bWNwdXNlcjp1bWEtc2VuaGEtZm9ydGU=
 ```
 
+!!! danger "NÃO use o hash bcrypt no header do cliente"
+    Erro comum: copiar `usuario:$2y$05$...` (o hash do `MCP_BASICAUTH_USERS`) para o
+    header → resulta em **401**. O hash é só do **servidor**. O cliente envia a
+    **senha em texto puro** em `base64("usuario:senha")`. Bcrypt é de mão única:
+    não dá para derivar a senha do hash — guarde a senha quando gerá-la.
+
 **Claude Code (CLI)**
 
 ```bash
@@ -647,7 +659,10 @@ máquina:
 
 | Sintoma | Causa provável | Ação |
 |---------|----------------|------|
-| Cliente recebe **401** | Basic Auth errado/ausente | confira o header `Authorization: Basic ...` (base64 de `usuario:senha`, senha em texto puro) |
+| Task do `grafana-mcp` em `Rejected` com **`No such image: grafana/mcp-grafana:vX.Y.Z`** | tag com prefixo `v` — a imagem no **Docker Hub** usa tag **sem `v`** (o `v` é só o nome da *release* no GitHub) | use `grafana/mcp-grafana:0.17.0` (sem `v`). Confira tags válidas: `https://hub.docker.com/v2/repositories/grafana/mcp-grafana/tags/` |
+| Rollout avisa **"serviço grafana-mcp ainda não existe"** / serviço não é criado | a VPS está com o `monitoring-stack.yml` **defasado** (sem o bloco do serviço) | rode `git pull` na VPS e o deploy de novo — o `deploy_monitoring.sh` já faz `git pull --ff-only` automaticamente |
+| Cliente recebe **401** | header `Authorization` montado com o **hash bcrypt** em vez da senha | o header é `Basic <base64("usuario:SENHA_EM_TEXTO_PURO")>` — **não** use o `$2y$...` (esse é o hash do servidor, em `MCP_BASICAUTH_USERS`). Gere: `printf 'usuario:senha' \| base64` |
+| Cliente recebe **404** e cert = **`TRAEFIK DEFAULT CERT`** | Traefik sem router para o Host → serviço não publicado / `MCP_DOMAIN` vazio no deploy | confirme `grafana-mcp` em `1/1`, `MCP_DOMAIN` no `.env` e redeploy; aguarde o Let's Encrypt emitir o cert |
 | `grafana-mcp` sobe mas as ferramentas falham | `GRAFANA_SERVICE_ACCOUNT_TOKEN` inválido/sem permissão | gere novo token com papel adequado; veja `docker service logs monitoring_grafana-mcp` |
 | Router do MCP some no Traefik | `MCP_DOMAIN` vazio (`Host()` inválido) | preencha `MCP_DOMAIN` no `.env` e redeploy |
 | Basic Auth não valida | hash com `$` **dobrado** (`$$`) por engano | use o hash do `htpasswd` com `$` **simples** — aqui o valor vem por interpolação e é injetado verbatim (não dobre) |

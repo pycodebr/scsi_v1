@@ -576,6 +576,10 @@ set -euo pipefail
 STACK_NAME="monitoring"; STACK_FILE="monitoring-stack.yml"
 CLEAN=0; [ "${1:-}" = "--clean" ] && CLEAN=1
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"; cd "$REPO_DIR"
+# 0.5) git pull --ff-only ANTES do deploy (igual ao deploy.sh do app): evita a VPS
+#      ficar com o stack file defasado (ex.: serviço novo não é criado). NÃO aborta
+#      se falhar — só avisa. Escape hatch: SKIP_GIT_PULL=1.
+[ "${SKIP_GIT_PULL:-0}" != "1" ] && command -v git >/dev/null 2>&1 && [ -d .git ] && { git pull --ff-only || echo "git pull falhou — seguindo com os arquivos atuais"; }
 # 1) docker + swarm manager; 2) load_env (parser seguro, igual ao deploy.sh)
 # 3) exigir GRAFANA_ADMIN_PASSWORD e GRAFANA_DOMAIN
 export MONITORING_CONFIG_DIR="$REPO_DIR/monitoring"          # path ABSOLUTO
@@ -637,6 +641,9 @@ MANDATÓRIOS:
 
 - Imagem oficial `grafana/mcp-grafana` (FIXE a última release estável), transporte
   **streamable-http** (`-t streamable-http`), porta `8000`, endpoint `/mcp`.
+  ⚠️ A tag no **Docker Hub** é **sem `v`** (ex.: `0.17.0`, não `v0.17.0` — o `v` só
+  existe na *release* do GitHub). Tag errada → task em `Rejected: No such image`.
+  Confira em `https://hub.docker.com/v2/repositories/grafana/mcp-grafana/tags/`.
 - Alcança o Grafana pela rede interna em `http://grafana:3000` (var `GRAFANA_URL`).
 - **SEM login próprio** → publique SEMPRE atrás do Traefik com **TLS + Basic Auth**
   (`MCP_BASICAUTH_USERS`, htpasswd bcrypt com `$` SIMPLES no `.env` — o valor entra
@@ -646,14 +653,17 @@ MANDATÓRIOS:
   - `GRAFANA_SERVICE_ACCOUNT_TOKEN` — o MCP usa p/ falar com o Grafana; fica
     **server-side** (env do container), o cliente NUNCA o envia.
   - `MCP_BASICAUTH_USERS` — o cliente usa p/ alcançar o endpoint via Traefik
-    (header `Authorization: Basic <base64("user:senha")>`).
+    (header `Authorization: Basic <base64("user:senha")>`). ⚠️ No header vai a
+    **senha em texto puro** em base64, NUNCA o hash bcrypt (`$2y$...`) — usar o
+    hash dá **401**. Bcrypt é de mão única: oriente a guardar a senha ao gerá-la.
 - Service Account no Grafana: **Administration → Users and access → Service
   accounts** → criar conta (papel `Viewer`/`Editor`) → gerar token (`glsa_...`) →
   `GRAFANA_SERVICE_ACCOUNT_TOKEN` no `.env`.
 - No `setup_monitoring.sh`, acrescente passos para configurar `MCP_DOMAIN`
   (default `mcp.<DOMAIN>`), orientar o DNS, gerar o Basic Auth e o token. No
-  `deploy_monitoring.sh`, AVISE (sem abortar) se as vars do MCP estiverem vazias e
-  inclua `grafana-mcp` no loop de rollout.
+  `deploy_monitoring.sh`, faça `git pull --ff-only` antes do deploy (fail-safe),
+  AVISE (sem abortar) se as vars do MCP estiverem vazias e inclua `grafana-mcp` no
+  loop de rollout.
 - Documente exemplos de conexão de cliente (remoto, streamable-http) e a
   ALTERNATIVA local stdio (`-t stdio` passando o token direto), conforme a doc
   oficial de client-configuration-examples do Grafana.
