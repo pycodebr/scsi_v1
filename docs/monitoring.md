@@ -667,3 +667,203 @@ máquina:
 | Router do MCP some no Traefik | `MCP_DOMAIN` vazio (`Host()` inválido) | preencha `MCP_DOMAIN` no `.env` e redeploy |
 | Basic Auth não valida | hash com `$` **dobrado** (`$$`) por engano | use o hash do `htpasswd` com `$` **simples** — aqui o valor vem por interpolação e é injetado verbatim (não dobre) |
 | Endpoint não responde | DNS do `mcp.${DOMAIN}` não propagou / TLS validando | aguarde 1-2 min; confira o registro A |
+
+### 12.6 Fluxo de uma consulta (do agente ao Grafana)
+
+O diagrama abaixo mostra o ciclo completo de uma pergunta: o **handshake** (uma vez
+por sessão) e uma **chamada de ferramenta** (`tools/call`). Repare nas duas
+fronteiras de credencial: o **Basic Auth** é validado no Traefik (borda) e o
+**Service Account token** é usado pelo `grafana-mcp` para falar com o Grafana.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant LLM as Agente de IA (LLM)
+    participant Cli as Cliente MCP
+    participant TR as Traefik · TLS + Basic Auth
+    participant MCP as grafana-mcp /mcp
+    participant GF as Grafana API
+    participant DS as Prometheus / Loki
+
+    Note over Cli,MCP: Handshake (1x por sessão)
+    Cli->>TR: POST /mcp · initialize · Authorization Basic
+    TR->>TR: valida Basic Auth (MCP_BASICAUTH_USERS)
+    TR->>MCP: encaminha (401 se auth falhar)
+    MCP-->>Cli: capabilities + Mcp-Session-Id
+    Cli->>MCP: tools/list
+    MCP-->>Cli: tools (Prometheus, Loki, dashboards, alertas)
+
+    Note over LLM,DS: Pergunta do usuário
+    LLM->>Cli: escolhe a tool (ex.: query_prometheus)
+    Cli->>TR: POST /mcp · tools/call · Mcp-Session-Id
+    TR->>MCP: encaminha
+    MCP->>GF: API com GRAFANA_SERVICE_ACCOUNT_TOKEN
+    GF->>DS: PromQL / LogQL
+    DS-->>GF: séries / linhas de log
+    GF-->>MCP: resultado
+    MCP-->>Cli: tool result (JSON)
+    Cli-->>LLM: contexto
+    LLM-->>LLM: resume em linguagem natural
+```
+
+Pontos-chave do fluxo:
+
+- O `Mcp-Session-Id` devolvido no `initialize` deve ir em **todas** as chamadas
+  seguintes da mesma sessão (`tools/list`, `tools/call`).
+- O `grafana-mcp` **não consulta os datasources direto** — ele chama a **API do
+  Grafana**, que por sua vez resolve PromQL/LogQL. Por isso o Grafana precisa ter
+  Prometheus e Loki provisionados (já vêm na stack, uids `prometheus` e `loki`).
+- Toda a credencial sensível (o token do Grafana) fica **server-side**; o agente
+  nunca a vê.
+
+### 12.7 Clientes/agentes conectados (Claude Code, Codex, OpenCode, Hermes Agent)
+
+O mesmo endpoint remoto atende **vários agentes ao mesmo tempo** — cada um só
+precisa apontar para `https://mcp.scsi.digital/mcp` e mandar o header de Basic
+Auth. O transporte é **streamable-http**.
+
+```mermaid
+flowchart LR
+    subgraph clients[Devs / Agentes de IA]
+        cc[Claude Code]
+        cx[Codex CLI]
+        oc[OpenCode]
+        hm[Hermes Agent]
+    end
+    ep["https://mcp.scsi.digital/mcp"]
+    subgraph vps[VPS - Docker Swarm]
+        tr["Traefik · TLS + Basic Auth"]
+        mcp[grafana-mcp]
+        gf[Grafana]
+    end
+    cc --> ep
+    cx --> ep
+    oc --> ep
+    hm --> ep
+    ep -->|Authorization: Basic ...| tr --> mcp --> gf
+```
+
+Nos exemplos, `bWNwdXNlcjp1bWEtc2VuaGEtZm9ydGU=` é só um placeholder — gere o seu com
+`printf 'usuario:senha' | base64`.
+
+**Claude Code** (suporte HTTP nativo):
+
+```bash
+claude mcp add --transport http grafana-scsi https://mcp.scsi.digital/mcp \
+  --header "Authorization: Basic bWNwdXNlcjp1bWEtc2VuaGEtZm9ydGU="
+```
+
+**OpenCode** (`opencode.json` — MCP remoto nativo):
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "grafana-scsi": {
+      "type": "remote",
+      "url": "https://mcp.scsi.digital/mcp",
+      "headers": { "Authorization": "Basic bWNwdXNlcjp1bWEtc2VuaGEtZm9ydGU=" },
+      "enabled": true
+    }
+  }
+}
+```
+
+**Codex CLI** (`~/.codex/config.toml`) e **Hermes Agent** — clientes que conectam
+por **stdio** usam o bridge `mcp-remote` (converte o endpoint streamable-http em
+stdio):
+
+```toml
+# ~/.codex/config.toml
+[mcp_servers.grafana-scsi]
+command = "npx"
+args = [
+  "-y", "mcp-remote", "https://mcp.scsi.digital/mcp",
+  "--header", "Authorization: Basic bWNwdXNlcjp1bWEtc2VuaGEtZm9ydGU="
+]
+```
+
+```json
+// Hermes Agent (formato padrão mcpServers)
+{
+  "mcpServers": {
+    "grafana-scsi": {
+      "command": "npx",
+      "args": [
+        "-y", "mcp-remote", "https://mcp.scsi.digital/mcp",
+        "--header", "Authorization: Basic bWNwdXNlcjp1bWEtc2VuaGEtZm9ydGU="
+      ]
+    }
+  }
+}
+```
+
+!!! tip "`mcp-remote`: bridge universal para clientes só-stdio"
+    Clientes que ainda não falam streamable-http nativamente conectam via
+    `npx -y mcp-remote <url> --header "Authorization: Basic ..."`. Se o cliente
+    **suportar HTTP nativo** (Claude Code, OpenCode), prefira a forma nativa —
+    menos uma dependência. O token do Grafana continua **server-side** em qualquer
+    caso; o cliente só leva o Basic Auth.
+
+### 12.8 Skill de monitoramento usando o MCP
+
+Com o MCP conectado, dá para encapsular um **check-up do sistema** em uma *skill*
+reutilizável (ex.: `monitor-scsi`). A skill não improvisa: ela fixa **quais
+queries** rodar (as mesmas PromQL/LogQL das seções [7](#7-como-usar-operacao) e
+[8](#8-alertas)) e **quais limiares** aplicar, e usa as ferramentas do MCP do
+Grafana para coletar e depois resumir a saúde do app **e** do servidor.
+
+```mermaid
+flowchart TD
+    u["Operador: /monitor-scsi"] --> sk[Skill monitor-scsi]
+    sk --> p1["query Prometheus<br/>up · 5xx · p95 · CPU · RAM · disco"]
+    sk --> p2["query Loki<br/>erros recentes do app"]
+    sk --> p3["list alert rules<br/>alertas disparando"]
+    p1 --> mcp[(grafana-mcp via MCP)]
+    p2 --> mcp
+    p3 --> mcp
+    mcp --> gf["Grafana to Prometheus / Loki"]
+    gf --> agg["Agente agrega + aplica limiares"]
+    agg --> esc{Severidade}
+    esc -->|ok| done["Resumo verde"]
+    esc -->|critico| act["Aponta runbook / abre incidente"]
+```
+
+Esqueleto da skill (Agent Skill — `SKILL.md`):
+
+```markdown
+---
+name: monitor-scsi
+description: >
+  Check-up de saúde do SCSI (app + servidor) consultando Grafana/Prometheus/Loki
+  pelo MCP `grafana-scsi`. Use para "como está o sistema?", "tem alerta?",
+  "está lento?", "o disco vai encher?".
+---
+
+Use SOMENTE as ferramentas do MCP `grafana-scsi`. Descubra os nomes exatos com
+`tools/list` (variam por versão: ex. consulta a Prometheus, consulta a Loki,
+listar alertas, listar datasources). Passos:
+
+1. Confirme os datasources: Prometheus (uid `prometheus`) e Loki (uid `loki`).
+2. App (Prometheus):
+   - Alvos no ar:  `up`  (todos devem valer 1)
+   - Erros 5xx (%): `100 * sum(rate(django_http_responses_total_by_status_total{status=~"5.."}[5m])) / clamp_min(sum(rate(django_http_responses_total_by_status_total[5m])),1)`  → 🔴 se > 0.5%
+   - Latência p95: `histogram_quantile(0.95, sum(rate(django_http_requests_latency_seconds_by_view_method_bucket[5m])) by (le))`  → 🟡 se > 2s
+3. Servidor/containers (Prometheus):
+   - CPU: `sum(rate(container_cpu_usage_seconds_total{name=~".+"}[5m])) by (name)`
+   - Memória: `sum(container_memory_usage_bytes{name=~".+"}) by (name)`
+   - Disco da raiz: `node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}`  → 🔴 se < 0.15
+4. Logs (Loki): `{stack="scsi_v1"} |= "ERROR"` na última 1h — conte e amostre.
+5. Alertas: liste regras disparando.
+6. Saída: tabela 🟢/🟡/🔴 por dimensão + 1 ação por item vermelho (aponte o
+   `docs/runbook.md`). NÃO altere nada — skill é read-only.
+```
+
+!!! note "Read-only por padrão"
+    Para um monitor, use um Service Account **`Viewer`** no Grafana — assim, mesmo
+    que a skill (ou o agente) tente criar/editar algo, o token não tem permissão.
+    Crie um SA `Editor`/`Admin` separado só se for automatizar mudanças.
+
+Exemplos de uso depois de pronta: *"/monitor-scsi"* para o relatório completo, ou
+perguntas diretas como *"o p95 passou de 2s na última hora?"* e *"liste os alertas
+disparando agora"* — o agente escolhe a ferramenta certa do MCP e responde.

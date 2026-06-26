@@ -667,6 +667,15 @@ MANDATÓRIOS:
 - Documente exemplos de conexão de cliente (remoto, streamable-http) e a
   ALTERNATIVA local stdio (`-t stdio` passando o token direto), conforme a doc
   oficial de client-configuration-examples do Grafana.
+- Inclua no doc **diagramas Mermaid**: (a) `sequenceDiagram` do fluxo de uma
+  consulta — handshake + `tools/call`, mostrando o Basic Auth no Traefik e o
+  `GRAFANA_SERVICE_ACCOUNT_TOKEN` server-side; (b) `flowchart` de múltiplos
+  clientes/agentes (Claude Code, Codex, OpenCode, Hermes Agent) apontando para o
+  mesmo endpoint remoto; (c) `flowchart` de uma **skill de monitoramento** que usa
+  as tools do MCP p/ checar app + servidor (Prometheus/Loki/alertas) e resume com
+  limiares. Para clientes só-stdio, documente o bridge `npx -y mcp-remote <url>
+  --header "Authorization: Basic ..."`. Skill de monitor = Service Account
+  **Viewer** (read-only).
 </deliverables>
 
 <dashboards>
