@@ -101,6 +101,58 @@ services:
           cpus: "0.1"
           memory: 128M
 
+  # ── MCP do Grafana (publicado via Traefik, protegido com Basic Auth) ──────
+  #  Servidor MCP oficial (grafana/mcp-grafana). Expõe as ferramentas do Grafana
+  #  (dashboards, datasources, Loki, Prometheus, alertas…) para clientes de IA
+  #  via streamable-http no endpoint /mcp (porta 8000).
+  #
+  #  ATENÇÃO: o servidor NÃO possui login próprio — quem alcança o endpoint opera
+  #  o Grafana com o GRAFANA_SERVICE_ACCOUNT_TOKEN. Por isso ele é publicado
+  #  SOMENTE atrás do Traefik com TLS + middleware de Basic Auth (MCP_BASICAUTH_USERS).
+  #
+  #  Pré-requisito: criar um Service Account no Grafana
+  #  (Administration → Users and access → Service accounts) e gerar um token,
+  #  colocando-o em GRAFANA_SERVICE_ACCOUNT_TOKEN no .env.
+  grafana-mcp:
+    image: grafana/mcp-grafana:v0.17.0
+    command:
+      - "-t"
+      - "streamable-http"
+    environment:
+      # Grafana acessível pela rede interna da monitoria (nome do serviço).
+      - GRAFANA_URL=http://grafana:3000
+      - GRAFANA_SERVICE_ACCOUNT_TOKEN=${GRAFANA_SERVICE_ACCOUNT_TOKEN}
+    networks:
+      - monitoring        # alcança o serviço grafana:3000
+      - traefik_public    # permite ao Traefik publicar o endpoint
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 5
+        window: 120s
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.grafana-mcp.rule=Host(`${MCP_DOMAIN}`)"
+        - "traefik.http.routers.grafana-mcp.entrypoints=websecure"
+        - "traefik.http.routers.grafana-mcp.tls=true"
+        - "traefik.http.routers.grafana-mcp.tls.certresolver=letsencrypt"
+        - "traefik.http.routers.grafana-mcp.middlewares=grafana-mcp-auth"
+        - "traefik.http.middlewares.grafana-mcp-auth.basicauth.users=${MCP_BASICAUTH_USERS}"
+        - "traefik.http.services.grafana-mcp.loadbalancer.server.port=8000"
+      resources:
+        limits:
+          cpus: "0.2"
+          memory: 128M
+        reservations:
+          cpus: "0.05"
+          memory: 64M
+
   # ── Logs: agregação ───────────────────────────────────────────────────────
   loki:
     image: grafana/loki:3.3.2

@@ -75,6 +75,15 @@ echo "--- Validações ---"
 [ -n "${GRAFANA_DOMAIN:-}" ] \
     || error "GRAFANA_DOMAIN vazio no .env — defina o subdomínio do Grafana (ex.: grafana.scsi.digital)."
 
+# Variáveis do servidor MCP do Grafana (serviço grafana-mcp). NÃO são obrigatórias
+# para o resto da stack subir — por isso AVISAMOS em vez de abortar (degradação
+# graciosa). Sem elas, só o endpoint MCP fica inoperante (ver docs/monitoring.md).
+for v in MCP_DOMAIN GRAFANA_SERVICE_ACCOUNT_TOKEN MCP_BASICAUTH_USERS; do
+    eval "_val=\${$v:-}"
+    [ -n "$_val" ] \
+        || warn "$v vazio no .env — o serviço 'grafana-mcp' não funcionará até preencher (ver docs/monitoring.md)."
+done
+
 # Caminho ABSOLUTO dos configs (montados nos containers). Sempre derivado do
 # repo para garantir consistência, independente do que estiver no .env.
 export MONITORING_CONFIG_DIR="$REPO_DIR/monitoring"
@@ -126,7 +135,7 @@ info "Stack reconciliada"
 if [ "$CLEAN" -eq 0 ]; then
     echo ""
     echo "--- Rollout dos serviços ---"
-    for svc in prometheus grafana loki promtail node-exporter cadvisor; do
+    for svc in prometheus grafana grafana-mcp loki promtail node-exporter cadvisor; do
         docker service update --force "${STACK_NAME}_${svc}" >/dev/null 2>&1 \
             && info "rollout: ${STACK_NAME}_${svc}" \
             || warn "rollout falhou (serviço ainda não existe?): ${STACK_NAME}_${svc}"
@@ -145,6 +154,8 @@ docker service ls --format "table {{.Name}}\t{{.Mode}}\t{{.Replicas}}\t{{.Image}
 echo ""
 echo "=== Deploy da monitoria concluído! ==="
 echo "  Grafana:    https://${GRAFANA_DOMAIN}  (login: ${GRAFANA_ADMIN_USER})"
+[ -n "${MCP_DOMAIN:-}" ] \
+    && echo "  MCP:        https://${MCP_DOMAIN}/mcp  (streamable-http, protegido por Basic Auth)"
 echo "  Retenção:   métricas=${PROMETHEUS_RETENTION}  logs=${LOKI_RETENTION}"
 echo ""
 echo "  Logs:       docker service logs -f ${STACK_NAME}_prometheus"

@@ -30,9 +30,15 @@ Observabilidade se apoia em três pilares. A stack cobre os três:
 | **Promtail** | `grafana/promtail` | Lê os logs dos containers e envia ao Loki | global (1 por nó) |
 | **node-exporter** | `prom/node-exporter` | Métricas do host (CPU, RAM, disco, rede) | global (1 por nó) |
 | **cAdvisor** | `cadvisor` | Métricas por container | global (1 por nó) |
+| **grafana-mcp** | `grafana/mcp-grafana` | Servidor MCP do Grafana p/ clientes de IA (via Traefik + Basic Auth) | 1 réplica (manager) |
 
 Do lado do Django, a biblioteca **`django-prometheus`** instrumenta o app e
 expõe um endpoint `/metrics` que o Prometheus coleta.
+
+O **servidor MCP do Grafana** (`grafana-mcp`) é a peça mais recente: expõe as
+ferramentas do Grafana (dashboards, datasources, consultas a Prometheus/Loki,
+alertas, incidentes…) por **MCP** para clientes de IA (Claude, Cursor, VS Code).
+Detalhes na [seção 12](#12-servidor-mcp-do-grafana).
 
 ---
 
@@ -59,6 +65,7 @@ flowchart TB
         subgraph monstack[stack: monitoring]
             prom[Prometheus :9090]
             graf[Grafana :3000]
+            mcp[grafana-mcp :8000<br/>/mcp]
             loki[Loki :3100]
             promtail[Promtail]
             node[node-exporter :9100]
@@ -66,8 +73,12 @@ flowchart TB
         end
     end
 
+    aiclient[Cliente de IA<br/>Claude / Cursor / VS Code]
+
     user -->|https://scsi.digital| traefik --> app
     user -->|https://grafana.scsi.digital| traefik --> graf
+    aiclient -->|https://mcp.scsi.digital/mcp<br/>Basic Auth| traefik --> mcp
+    mcp -->|service account token| graf
 
     prom -->|scrape /metrics| app
     prom -->|scrape| node
@@ -80,7 +91,7 @@ flowchart TB
 
     classDef mon fill:#1f6feb22,stroke:#1f6feb;
     classDef app fill:#2da44e22,stroke:#2da44e;
-    class prom,graf,loki,promtail,node,cadvisor mon;
+    class prom,graf,mcp,loki,promtail,node,cadvisor mon;
     class app,db,worker,redis,rabbit app;
 ```
 
@@ -285,6 +296,12 @@ GRAFANA_ADMIN_USER=admin
 GRAFANA_ADMIN_PASSWORD=troque-esta-senha-do-grafana
 PROMETHEUS_RETENTION=15d
 LOKI_RETENTION=360h
+
+# Servidor MCP do Grafana (serviço grafana-mcp) — ver seção 12
+MCP_DOMAIN=mcp.scsi.digital
+GRAFANA_SERVICE_ACCOUNT_TOKEN=glsa_...        # token de um Service Account do Grafana
+MCP_BASICAUTH_USERS=admin:$2y$05$...          # htpasswd bcrypt, "$" SIMPLES (ver 12.2)
+
 MONITORING_CONFIG_DIR=        # preenchido automaticamente pelos scripts
 ```
 
@@ -447,3 +464,191 @@ docker service ls | grep monitoring_
 docker service logs -f monitoring_prometheus
 docker service logs -f monitoring_loki
 ```
+
+---
+
+## 12. Servidor MCP do Grafana
+
+O serviço **`grafana-mcp`** roda a imagem oficial
+[`grafana/mcp-grafana`](https://github.com/grafana/mcp-grafana) e expõe, via
+**MCP (Model Context Protocol)**, as ferramentas do Grafana para clientes de IA:
+buscar e ler dashboards, consultar datasources, rodar PromQL no Prometheus e
+LogQL no Loki, inspecionar alertas/incidentes, gerenciar datasources, etc.
+
+Assim, em vez de abrir o Grafana no navegador, você conversa com a observabilidade
+em linguagem natural ("qual a latência p95 da última hora?", "tem algum alerta
+disparado?", "mostre os logs de erro do `scsi_v1_app`") direto do Claude, Cursor
+ou VS Code.
+
+### 12.1 Como está publicado
+
+```mermaid
+flowchart LR
+    cli[Cliente de IA<br/>Claude / Cursor / VS Code]
+    traefik[Traefik<br/>TLS + Basic Auth]
+    mcp[grafana-mcp<br/>:8000 /mcp]
+    graf[Grafana :3000]
+
+    cli -->|"https://mcp.${DOMAIN}/mcp<br/>(Authorization: Basic ...)"| traefik
+    traefik -->|Basic Auth OK| mcp
+    mcp -->|"GRAFANA_SERVICE_ACCOUNT_TOKEN"| graf
+```
+
+| Item | Valor |
+|------|-------|
+| Imagem | `grafana/mcp-grafana:v0.17.0` (versão fixada) |
+| Transporte | **streamable-http** (`-t streamable-http`), porta `8000`, endpoint `/mcp` |
+| Rede interna | alcança o Grafana em `http://grafana:3000` pela rede `monitoring` |
+| Publicação | Traefik (TLS Let's Encrypt) em `https://${MCP_DOMAIN}/mcp` |
+| Autenticação na borda | **Basic Auth** do Traefik (`MCP_BASICAUTH_USERS`) |
+| Autenticação no Grafana | `GRAFANA_SERVICE_ACCOUNT_TOKEN` (fica **no servidor**, nunca vai ao cliente) |
+
+!!! warning "Por que Basic Auth na frente é obrigatório"
+    O `mcp-grafana` **não tem login próprio**: quem alcança o endpoint opera o
+    Grafana com o `GRAFANA_SERVICE_ACCOUNT_TOKEN`. Por isso ele é publicado
+    **somente** atrás do Traefik com TLS **e** middleware de Basic Auth. Sem o
+    Basic Auth, o endpoint ficaria aberto na internet.
+
+São **duas camadas de credencial** com papéis distintos:
+
+- **Service Account Token** (`GRAFANA_SERVICE_ACCOUNT_TOKEN`): é com ele que o MCP
+  *fala com o Grafana*. Fica no container (env), **server-side** — o cliente nunca
+  o envia.
+- **Basic Auth** (`MCP_BASICAUTH_USERS`): é com ele que o *cliente alcança o
+  endpoint* através do Traefik. É o que vai no header `Authorization: Basic ...`.
+
+### 12.2 Pré-requisitos (uma vez)
+
+**1. Criar o Service Account e o token no Grafana**
+
+No Grafana: **Administration → Users and access → Service accounts → Add service
+account** → defina o papel (ex.: `Viewer` para só consultar, `Editor` se for
+criar/editar dashboards) → **Add service account token** → copie o token
+(`glsa_...`) e coloque em `GRAFANA_SERVICE_ACCOUNT_TOKEN` no `.env`.
+
+```bash
+GRAFANA_SERVICE_ACCOUNT_TOKEN=glsa_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+```
+
+**2. Gerar as credenciais do Basic Auth (htpasswd, bcrypt)**
+
+```bash
+htpasswd -nbB mcpuser 'uma-senha-forte'
+# saída: mcpuser:$2y$05$abcdef...
+```
+
+Coloque em `MCP_BASICAUTH_USERS` **exatamente como saiu, com `$` simples**:
+
+```bash
+MCP_BASICAUTH_USERS=mcpuser:$2y$05$abcdef...
+```
+
+!!! warning "Aqui o `$` NÃO é dobrado"
+    Diferente do `$` escrito **direto** na stack (ex.: a regex do `node-exporter`,
+    que usa `$$`), aqui o hash chega pela **interpolação de variável**
+    (`${MCP_BASICAUTH_USERS}`). Os scripts exportam o `.env` e o `docker stack
+    deploy` injeta o valor **verbatim** — então dobrar para `$$` faria o Traefik
+    receber `$$` literal e o login falharia. Use o hash com **um `$`**.
+
+> Vários usuários: separe por vírgula. Sem o `htpasswd`? Instale com
+> `apt-get install -y apache2-utils`.
+
+**3. Apontar o DNS** de `mcp.${DOMAIN}` (registro A/CNAME) para o IP da VPS e
+definir `MCP_DOMAIN=mcp.scsi.digital` no `.env`.
+
+Depois, suba/atualize a monitoria normalmente: `bash scripts/deploy_monitoring.sh`.
+
+### 12.3 Conexão do cliente
+
+O cliente conecta no endpoint **streamable-http** `https://${MCP_DOMAIN}/mcp`
+enviando o header de **Basic Auth** do Traefik. O valor é
+`Basic <base64("usuario:senha")>` (a **senha em texto puro**, não o hash):
+
+```bash
+# gere o valor do header uma vez:
+printf 'mcpuser:uma-senha-forte' | base64
+# -> bWNwdXNlcjp1bWEtc2VuaGEtZm9ydGU=
+```
+
+**Claude Code (CLI)**
+
+```bash
+claude mcp add --transport http grafana https://mcp.scsi.digital/mcp \
+  --header "Authorization: Basic bWNwdXNlcjp1bWEtc2VuaGEtZm9ydGU="
+```
+
+**Claude Desktop / Cursor** (`~/.cursor/mcp.json` ou config de MCP do app)
+
+```json
+{
+  "mcpServers": {
+    "grafana": {
+      "url": "https://mcp.scsi.digital/mcp",
+      "headers": {
+        "Authorization": "Basic bWNwdXNlcjp1bWEtc2VuaGEtZm9ydGU="
+      }
+    }
+  }
+}
+```
+
+**VS Code** (`.vscode/mcp.json` ou *Settings → MCP*)
+
+```json
+{
+  "servers": {
+    "grafana": {
+      "type": "http",
+      "url": "https://mcp.scsi.digital/mcp",
+      "headers": {
+        "Authorization": "Basic bWNwdXNlcjp1bWEtc2VuaGEtZm9ydGU="
+      }
+    }
+  }
+}
+```
+
+!!! note "O token do Grafana NÃO vai no cliente"
+    Na nossa publicação remota, o `GRAFANA_SERVICE_ACCOUNT_TOKEN` já está
+    configurado **no container** (server-side). O cliente só precisa do Basic Auth
+    do Traefik. Isso mantém o token fora das máquinas dos clientes.
+
+### 12.4 Alternativa local (stdio, sem expor nada)
+
+Para uso pessoal pontual — sem publicar o serviço — dá para rodar o MCP
+**localmente em stdio**, passando o token direto (modelo da
+[doc oficial](https://grafana.com/docs/grafana-cloud/machine-learning/mcp/set-up/client-configuration-examples/)).
+Aqui o `GRAFANA_SERVICE_ACCOUNT_TOKEN` vai **no cliente**, pois o MCP roda na sua
+máquina:
+
+```json
+{
+  "mcpServers": {
+    "grafana": {
+      "command": "docker",
+      "args": [
+        "run", "--rm", "-i",
+        "-e", "GRAFANA_URL=https://grafana.scsi.digital",
+        "-e", "GRAFANA_SERVICE_ACCOUNT_TOKEN",
+        "grafana/mcp-grafana:v0.17.0", "-t", "stdio"
+      ],
+      "env": {
+        "GRAFANA_SERVICE_ACCOUNT_TOKEN": "glsa_xxxxxxxxxxxxxxxxxxxxxxxx"
+      }
+    }
+  }
+}
+```
+
+> Use **ou** o serviço remoto (`grafana-mcp` na stack, recomendado p/ time) **ou**
+> o stdio local (pontual). Não precisa dos dois.
+
+### 12.5 Solução de problemas (MCP)
+
+| Sintoma | Causa provável | Ação |
+|---------|----------------|------|
+| Cliente recebe **401** | Basic Auth errado/ausente | confira o header `Authorization: Basic ...` (base64 de `usuario:senha`, senha em texto puro) |
+| `grafana-mcp` sobe mas as ferramentas falham | `GRAFANA_SERVICE_ACCOUNT_TOKEN` inválido/sem permissão | gere novo token com papel adequado; veja `docker service logs monitoring_grafana-mcp` |
+| Router do MCP some no Traefik | `MCP_DOMAIN` vazio (`Host()` inválido) | preencha `MCP_DOMAIN` no `.env` e redeploy |
+| Basic Auth não valida | hash com `$` **dobrado** (`$$`) por engano | use o hash do `htpasswd` com `$` **simples** — aqui o valor vem por interpolação e é injetado verbatim (não dobre) |
+| Endpoint não responde | DNS do `mcp.${DOMAIN}` não propagou / TLS validando | aguarde 1-2 min; confira o registro A |

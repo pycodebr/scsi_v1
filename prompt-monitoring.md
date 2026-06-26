@@ -17,7 +17,8 @@
 <role>
 Você é um(a) engenheiro(a) Django sênior especialista em DevOps e
 observabilidade: Docker Swarm, Traefik, Prometheus, Grafana, Loki, Promtail,
-node-exporter e cAdvisor. Você implementa mudanças de produção com disciplina:
+node-exporter, cAdvisor e o servidor MCP do Grafana (`grafana/mcp-grafana`). Você
+implementa mudanças de produção com disciplina:
 instrumentação com degradação graciosa, stacks isoladas, service discovery por
 DNS e zero downtime no que já está no ar. Você escreve scripts de shell
 didáticos e idempotentes, e documenta com diagramas.
@@ -42,7 +43,9 @@ instrumentar o Django. Ao final, o operador deve conseguir:
 - ver métricas de aplicação (latência, throughput, erros) e de infra (CPU, RAM,
   disco, containers) em dashboards do Grafana;
 - pesquisar logs de todos os containers em um lugar só (Loki);
-- receber alertas quando algo sair do esperado.
+- receber alertas quando algo sair do esperado;
+- conversar com a observabilidade via IA (servidor MCP do Grafana), publicado
+  com TLS e protegido por Basic Auth.
 Tudo isso SEM tocar no deploy da aplicação e em uma stack Swarm SEPARADA.
 </objective>
 
@@ -264,6 +267,30 @@ services:
         - "traefik.http.services.grafana.loadbalancer.server.port=3000"
       resources: { limits: { cpus: "0.3", memory: 256M } }
 
+  # Servidor MCP do Grafana p/ clientes de IA. SEM login próprio -> publique
+  # SEMPRE atrás do Traefik com TLS + Basic Auth. Transporte streamable-http (/mcp).
+  grafana-mcp:
+    image: grafana/mcp-grafana:v0.17.0      # fixe a última release estável
+    command: ["-t", "streamable-http"]
+    environment:
+      - GRAFANA_URL=http://grafana:3000     # rede interna 'monitoring'
+      - GRAFANA_SERVICE_ACCOUNT_TOKEN=${GRAFANA_SERVICE_ACCOUNT_TOKEN}
+    networks: [monitoring, traefik_public]
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement: { constraints: ["node.role == manager"] }
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.grafana-mcp.rule=Host(`${MCP_DOMAIN}`)"
+        - "traefik.http.routers.grafana-mcp.entrypoints=websecure"
+        - "traefik.http.routers.grafana-mcp.tls=true"
+        - "traefik.http.routers.grafana-mcp.tls.certresolver=letsencrypt"
+        - "traefik.http.routers.grafana-mcp.middlewares=grafana-mcp-auth"
+        - "traefik.http.middlewares.grafana-mcp-auth.basicauth.users=${MCP_BASICAUTH_USERS}"
+        - "traefik.http.services.grafana-mcp.loadbalancer.server.port=8000"
+      resources: { limits: { cpus: "0.2", memory: 128M } }
+
   loki:
     image: grafana/loki:3.3.2
     command: ["-config.file=/etc/loki/loki-config.yml", "-config.expand-env=true"]
@@ -318,8 +345,11 @@ networks:
   traefik_public: { external: true }
 ```
 
-> ATENÇÃO ao `$$` em `node-exporter` (escape de `$` no stack deploy) e ao
+> ATENÇÃO ao `$$` em `node-exporter` (escape de `$` escrito DIRETO na stack) e ao
 > `-config.expand-env=true` no Loki (permite `${LOKI_RETENTION}` no config).
+> Já o hash do `MCP_BASICAUTH_USERS` usa `$` SIMPLES no `.env`: ele entra por
+> interpolação (`${MCP_BASICAUTH_USERS}`) e o `docker stack deploy` injeta o valor
+> verbatim — dobrar para `$$` faria o Traefik receber `$$` literal e o login falhar.
 
 ### 3. Configs em `monitoring/`
 
@@ -551,11 +581,15 @@ REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"; cd "$REPO_DIR"
 export MONITORING_CONFIG_DIR="$REPO_DIR/monitoring"          # path ABSOLUTO
 export PROMETHEUS_RETENTION="${PROMETHEUS_RETENTION:-15d}"
 export LOKI_RETENTION="${LOKI_RETENTION:-360h}"
+# 3b) AVISAR (não abortar) se faltarem as vars do MCP: MCP_DOMAIN,
+#     GRAFANA_SERVICE_ACCOUNT_TOKEN, MCP_BASICAUTH_USERS (degradação graciosa —
+#     só o serviço grafana-mcp fica inoperante; o resto da stack sobe normal).
 # 4) garantir rede 'monitoring'; exigir 'traefik_public'
 docker network ls --format '{{.Name}}' | grep -qx monitoring || docker network create --driver overlay --attachable monitoring
 [ "$CLEAN" = 1 ] && { docker stack rm "$STACK_NAME" || true; sleep 15; }   # volumes preservados
 docker stack deploy -c "$STACK_FILE" "$STACK_NAME"
-[ "$CLEAN" = 0 ] && for s in prometheus grafana loki promtail node-exporter cadvisor; do docker service update --force "${STACK_NAME}_${s}" >/dev/null 2>&1 || true; done
+# inclua grafana-mcp no rollout:
+[ "$CLEAN" = 0 ] && for s in prometheus grafana grafana-mcp loki promtail node-exporter cadvisor; do docker service update --force "${STACK_NAME}_${s}" >/dev/null 2>&1 || true; done
 docker service ls --format "table {{.Name}}\t{{.Replicas}}\t{{.Image}}" | grep -E "^NAME|^${STACK_NAME}_" || true
 ```
 
@@ -570,6 +604,12 @@ GRAFANA_ADMIN_USER=admin
 GRAFANA_ADMIN_PASSWORD=troque-esta-senha-do-grafana
 PROMETHEUS_RETENTION=15d
 LOKI_RETENTION=360h                  # múltiplo de 24h (360h = 15 dias)
+
+# Servidor MCP do Grafana (serviço grafana-mcp)
+MCP_DOMAIN=mcp.<DOMAIN>
+GRAFANA_SERVICE_ACCOUNT_TOKEN=glsa_...           # token de Service Account do Grafana
+MCP_BASICAUTH_USERS=user:$2y$05$...              # htpasswd -nbB user senha; "$" SIMPLES (vem por interpolação)
+
 MONITORING_CONFIG_DIR=               # preenchido automaticamente pelos scripts
 ```
 
@@ -584,8 +624,39 @@ painéis do app em "no data": (a) **400 + DisallowedHost** — scrape pelo IP in
 do container fora do `ALLOWED_HOSTS`, tratado pelo `MetricsHostMiddleware`; (b)
 alvo **DOWN** com `301`/`connection refused na 443` — `SECURE_SSL_REDIRECT`
 redireciona o `/metrics` (HTTP) p/ https, resolvido isentando a rota em
-`SECURE_REDIRECT_EXEMPT = [r'^health/$', r'^metrics$']`); e a seção de dashboards
-(item <dashboards>).
+`SECURE_REDIRECT_EXEMPT = [r'^health/$', r'^metrics$']`); a seção de dashboards
+(item <dashboards>); e a seção do **servidor MCP do Grafana** (item 7): como está
+publicado (Traefik + Basic Auth), criação do Service Account token, e exemplos de
+configuração de cliente (Claude Code/Desktop, Cursor, VS Code) conectando em
+`https://${MCP_DOMAIN}/mcp` com header `Authorization: Basic ...`.
+
+### 7. Servidor MCP do Grafana (`grafana-mcp`)
+
+Adicione o serviço `grafana-mcp` à stack (já no item 2) e documente o uso. Pontos
+MANDATÓRIOS:
+
+- Imagem oficial `grafana/mcp-grafana` (FIXE a última release estável), transporte
+  **streamable-http** (`-t streamable-http`), porta `8000`, endpoint `/mcp`.
+- Alcança o Grafana pela rede interna em `http://grafana:3000` (var `GRAFANA_URL`).
+- **SEM login próprio** → publique SEMPRE atrás do Traefik com **TLS + Basic Auth**
+  (`MCP_BASICAUTH_USERS`, htpasswd bcrypt com `$` SIMPLES no `.env` — o valor entra
+  por interpolação e é injetado verbatim; dobrar p/ `$$` quebra o login). NUNCA
+  exponha sem Basic Auth.
+- **Duas camadas de credencial** (explique a diferença no doc):
+  - `GRAFANA_SERVICE_ACCOUNT_TOKEN` — o MCP usa p/ falar com o Grafana; fica
+    **server-side** (env do container), o cliente NUNCA o envia.
+  - `MCP_BASICAUTH_USERS` — o cliente usa p/ alcançar o endpoint via Traefik
+    (header `Authorization: Basic <base64("user:senha")>`).
+- Service Account no Grafana: **Administration → Users and access → Service
+  accounts** → criar conta (papel `Viewer`/`Editor`) → gerar token (`glsa_...`) →
+  `GRAFANA_SERVICE_ACCOUNT_TOKEN` no `.env`.
+- No `setup_monitoring.sh`, acrescente passos para configurar `MCP_DOMAIN`
+  (default `mcp.<DOMAIN>`), orientar o DNS, gerar o Basic Auth e o token. No
+  `deploy_monitoring.sh`, AVISE (sem abortar) se as vars do MCP estiverem vazias e
+  inclua `grafana-mcp` no loop de rollout.
+- Documente exemplos de conexão de cliente (remoto, streamable-http) e a
+  ALTERNATIVA local stdio (`-t stdio` passando o token direto), conforme a doc
+  oficial de client-configuration-examples do Grafana.
 </deliverables>
 
 <dashboards>

@@ -253,6 +253,68 @@ step "Definindo retenção de métricas e logs"
 info "Métricas guardadas por ${BOLD}$(get_env_var PROMETHEUS_RETENTION)${RESET}; logs por ${BOLD}$(get_env_var LOKI_RETENTION)${RESET}"
 info "Namespace das métricas: ${BOLD}$(get_env_var PROMETHEUS_METRIC_NAMESPACE)${RESET}"
 
+# ── PASSO 5b — Configurar o servidor MCP do Grafana ──
+step "Configurando o servidor MCP do Grafana (para clientes de IA)"
+echo "  O servidor MCP expõe as ferramentas do Grafana (dashboards, métricas, logs,"
+echo "  alertas) para clientes de IA — Claude, Cursor, VS Code. Ele NÃO tem login"
+echo "  próprio, então é publicado atrás do Traefik com HTTPS e protegido por Basic Auth."
+echo "  ${GREY}(Opcional: se deixar em branco, o resto da monitoria sobe normal.)${RESET}"
+echo ""
+
+MCP_DOMAIN_CUR="$(get_env_var MCP_DOMAIN)"
+DEFAULT_MCP_DOMAIN="${MCP_DOMAIN_CUR:-mcp.${DOMAIN_BASE:-exemplo.com}}"
+MCP_DOMAIN_VAL="$(ask "Subdomínio do servidor MCP" "$DEFAULT_MCP_DOMAIN")"
+set_env_var "MCP_DOMAIN" "$MCP_DOMAIN_VAL"
+ok "MCP_DOMAIN = ${BOLD}${MCP_DOMAIN_VAL}${RESET}"
+info "Aponte um registro DNS (A) de ${BOLD}${MCP_DOMAIN_VAL}${RESET} p/ o IP da VPS (o curinga *.${DOMAIN_BASE} já cobre)."
+
+# Token do Service Account do Grafana (o MCP usa p/ falar com o Grafana; server-side).
+MCP_TOKEN_CUR="$(get_env_var GRAFANA_SERVICE_ACCOUNT_TOKEN)"
+if [[ -n "$MCP_TOKEN_CUR" && "$MCP_TOKEN_CUR" == glsa_* ]]; then
+  skip "Token do Service Account do Grafana já definido no .env"
+else
+  action_box \
+    "Crie o token no Grafana (pode ser depois que ele estiver no ar):" \
+    "    Administration → Users and access → Service accounts" \
+    "    → Add service account (papel Viewer p/ ler, Editor p/ criar/editar)" \
+    "    → Add service account token → copie o token (glsa_...)" \
+    "" \
+    "Cole agora ou deixe em branco e preencha depois no .env."
+  MCP_TOKEN_VAL="$(ask_secret "Cole o GRAFANA_SERVICE_ACCOUNT_TOKEN (ENTER = depois)")"
+  if [[ -n "$MCP_TOKEN_VAL" ]]; then
+    set_env_var "GRAFANA_SERVICE_ACCOUNT_TOKEN" "$MCP_TOKEN_VAL"
+    ok "Token do Service Account salvo no .env"
+  else
+    [[ -n "$MCP_TOKEN_CUR" ]] || set_env_var "GRAFANA_SERVICE_ACCOUNT_TOKEN" ""
+    warn "Token em branco — o serviço 'grafana-mcp' só funcionará após você preenchê-lo no .env."
+  fi
+fi
+
+# Basic Auth (htpasswd bcrypt). '$' SIMPLES: o valor entra por interpolação e é
+# injetado verbatim pelo docker stack deploy (dobrar p/ '$$' quebraria o login).
+MCP_BAUTH_HEADER=""
+MCP_BAUTH_CUR="$(get_env_var MCP_BASICAUTH_USERS)"
+if [[ -n "$MCP_BAUTH_CUR" && "$MCP_BAUTH_CUR" == *:* && "$MCP_BAUTH_CUR" != *troque* ]]; then
+  skip "Basic Auth do MCP já definido no .env"
+else
+  MCP_BAUTH_USER="$(ask "Usuário do Basic Auth do MCP" "mcp")"
+  MCP_BAUTH_PASS="$(ask_secret "Senha do Basic Auth do MCP (ENTER = gerar)")"
+  if [[ -z "$MCP_BAUTH_PASS" ]]; then MCP_BAUTH_PASS="$(gen_secret 20)"; info "Senha do MCP gerada automaticamente."; fi
+  MCP_HASH=""
+  if have htpasswd; then
+    MCP_HASH="$(htpasswd -nbB "$MCP_BAUTH_USER" "$MCP_BAUTH_PASS" 2>/dev/null || true)"
+  elif have openssl; then
+    MCP_HASH="${MCP_BAUTH_USER}:$(openssl passwd -apr1 "$MCP_BAUTH_PASS" 2>/dev/null || true)"
+  fi
+  if [[ -n "$MCP_HASH" && "$MCP_HASH" == *:?* ]]; then
+    set_env_var "MCP_BASICAUTH_USERS" "$MCP_HASH"
+    ok "Basic Auth do MCP salvo no .env (usuário: ${BOLD}${MCP_BAUTH_USER}${RESET})"
+    MCP_BAUTH_HEADER="$(printf '%s:%s' "$MCP_BAUTH_USER" "$MCP_BAUTH_PASS" | base64 | tr -d '\n')"
+  else
+    warn "Sem 'htpasswd' nem 'openssl' p/ gerar o hash. Instale 'apache2-utils' e defina MCP_BASICAUTH_USERS no .env."
+  fi
+fi
+
 # ── PASSO 6 — Apontar o DNS do Grafana ──
 step "Apontando o DNS do Grafana"
 PUBLIC_IP="$(curl -4 -fsS --max-time 5 https://api.ipify.org 2>/dev/null || true)"
@@ -374,6 +436,17 @@ echo "     {stack=\"scsi_v1\"}"
 echo ""
 echo "  ${BOLD}Conferir os alvos:${RESET} Grafana > Explore > Prometheus > consulta: up"
 echo "     (cada alvo deve aparecer com valor 1)"
+echo ""
+echo "  ${BOLD}Servidor MCP do Grafana (IA):${RESET} https://${MCP_DOMAIN_VAL:-mcp.${DOMAIN_BASE}}/mcp"
+if [[ -n "${MCP_BAUTH_HEADER:-}" ]]; then
+  echo "     Conecte um cliente (ex.: Claude Code):"
+  echo "       ${GREY}claude mcp add --transport http grafana https://${MCP_DOMAIN_VAL}/mcp \\${RESET}"
+  echo "       ${GREY}  --header \"Authorization: Basic ${MCP_BAUTH_HEADER}\"${RESET}"
+else
+  echo "     ${GREY}Header do cliente = Authorization: Basic base64(\"usuario:senha\") do MCP_BASICAUTH_USERS${RESET}"
+  echo "     ${GREY}Faltou GRAFANA_SERVICE_ACCOUNT_TOKEN ou MCP_BASICAUTH_USERS? Preencha no .env e rode deploy_monitoring.sh${RESET}"
+fi
+echo "     ${GREY}Exemplos de cliente (Cursor/VS Code) e detalhes: docs/monitoring.md (seção 12)${RESET}"
 echo ""
 echo "  ${GREY}Redeploy futuro da monitoria:  bash scripts/deploy_monitoring.sh${RESET}"
 echo "  ${GREY}Log deste guia:                ${LOG_FILE}${RESET}"
