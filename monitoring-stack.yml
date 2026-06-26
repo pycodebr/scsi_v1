@@ -114,7 +114,7 @@ services:
   #  (Administration → Users and access → Service accounts) e gerar um token,
   #  colocando-o em GRAFANA_SERVICE_ACCOUNT_TOKEN no .env.
   grafana-mcp:
-    image: grafana/mcp-grafana:v0.17.0
+    image: grafana/mcp-grafana:0.17.0
     command:
       - "-t"
       - "streamable-http"

@@ -49,6 +49,21 @@ REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_DIR"
 [ -f "$STACK_FILE" ] || error "$STACK_FILE não encontrado em $REPO_DIR"
 
+# ── 0.5 Atualiza o repositório (git pull) ──
+# Igual ao deploy.sh do app: garante que o stack file e os configs da monitoria
+# estão na última versão antes de reconciliar a stack (ex.: serviço grafana-mcp
+# recém-adicionado). NÃO aborta se falhar — apenas avisa e segue com o que há.
+# Pule com:  SKIP_GIT_PULL=1 ./scripts/deploy_monitoring.sh
+if [ "${SKIP_GIT_PULL:-0}" != "1" ] && command -v git >/dev/null 2>&1 && [ -d .git ]; then
+    echo ""
+    echo "--- Atualizando o repositório (git pull --ff-only) ---"
+    if git pull --ff-only; then
+        info "Repositório atualizado"
+    else
+        warn "git pull falhou (alterações locais ou histórico divergente?) — seguindo com os arquivos atuais."
+    fi
+fi
+
 # ── 1. Carrega .env (parser seguro: NÃO faz source) ──
 [ -f .env ] || error "Arquivo .env não encontrado em $REPO_DIR"
 echo "--- Carregando .env ---"

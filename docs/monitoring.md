@@ -496,7 +496,7 @@ flowchart LR
 
 | Item | Valor |
 |------|-------|
-| Imagem | `grafana/mcp-grafana:v0.17.0` (versão fixada) |
+| Imagem | `grafana/mcp-grafana:0.17.0` (versão fixada; tag do Docker Hub **sem** `v`) |
 | Transporte | **streamable-http** (`-t streamable-http`), porta `8000`, endpoint `/mcp` |
 | Rede interna | alcança o Grafana em `http://grafana:3000` pela rede `monitoring` |
 | Publicação | Traefik (TLS Let's Encrypt) em `https://${MCP_DOMAIN}/mcp` |
@@ -630,7 +630,7 @@ máquina:
         "run", "--rm", "-i",
         "-e", "GRAFANA_URL=https://grafana.scsi.digital",
         "-e", "GRAFANA_SERVICE_ACCOUNT_TOKEN",
-        "grafana/mcp-grafana:v0.17.0", "-t", "stdio"
+        "grafana/mcp-grafana:0.17.0", "-t", "stdio"
       ],
       "env": {
         "GRAFANA_SERVICE_ACCOUNT_TOKEN": "glsa_xxxxxxxxxxxxxxxxxxxxxxxx"

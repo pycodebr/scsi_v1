@@ -270,7 +270,7 @@ services:
   # Servidor MCP do Grafana p/ clientes de IA. SEM login próprio -> publique
   # SEMPRE atrás do Traefik com TLS + Basic Auth. Transporte streamable-http (/mcp).
   grafana-mcp:
-    image: grafana/mcp-grafana:v0.17.0      # fixe a última release estável
+    image: grafana/mcp-grafana:0.17.0       # fixe a última release estável (tag Docker Hub SEM "v")
     command: ["-t", "streamable-http"]
     environment:
       - GRAFANA_URL=http://grafana:3000     # rede interna 'monitoring'
