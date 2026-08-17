@@ -458,25 +458,25 @@
           <span class="ic">linux · macOS</span>
           <h4>setup_local.sh</h4>
           <div class="where">roda no · seu PC</div>
-          <code class="run">curl …/setup_local.sh | bash</code>
+          <code class="run">curl https://raw.githubusercontent.com/pycodebr/scsi_v1/main/scripts/setup_local.sh | bash</code>
         </div>
         <div class="card">
           <span class="ic">windows</span>
           <h4>setup_local.ps1</h4>
           <div class="where">roda no · seu PC (PowerShell Admin)</div>
-          <code class="run">irm …/setup_local.ps1 | iex</code>
+          <code class="run">irm https://raw.githubusercontent.com/pycodebr/scsi_v1/main/scripts/setup_local.ps1 | iex</code>
         </div>
         <div class="card">
           <span class="ic">servidor</span>
           <h4>setup_deploy.sh</h4>
           <div class="where">roda na · VPS (como root)</div>
-          <code class="run">curl …/setup_deploy.sh | sudo bash</code>
+          <code class="run">curl https://raw.githubusercontent.com/pycodebr/scsi_v1/main/scripts/setup_deploy.sh | sudo bash</code>
         </div>
         <div class="card">
           <span class="ic">servidor · opcional</span>
           <h4>setup_monitoring.sh</h4>
           <div class="where">roda na · VPS (após o deploy)</div>
-          <code class="run">curl …/setup_monitoring.sh | bash</code>
+          <code class="run">curl https://raw.githubusercontent.com/pycodebr/scsi_v1/main/scripts/setup_monitoring.sh | bash</code>
         </div>
       </div>
 
@@ -522,9 +522,9 @@
       <p><strong>Comando único</strong> (recomendado — baixa e executa):</p>
       <div class="code" data-lang="bash">
         <div class="code__bar"><span class="code__lang">bash</span><button class="copy">copiar</button></div>
-        <pre><code><span class="tok-f">curl</span> -fsSL <span class="tok-u">https://pycodebr.com.br/setup_local.sh</span> -o setup_local.sh &amp;&amp; <span class="tok-f">bash</span> setup_local.sh</code></pre>
+        <pre><code><span class="tok-f">curl</span> -fsSL <span class="tok-u">https://raw.githubusercontent.com/pycodebr/scsi_v1/main/scripts/setup_local.sh</span> -o setup_local.sh &amp;&amp; <span class="tok-f">bash</span> setup_local.sh</code></pre>
       </div>
-      <div class="note cyan">O script é <b>interativo</b> (pergunta a pasta e o nome do projeto). Ele redireciona a entrada do teclado a partir do <code>/dev/tty</code>, então até o formato <code>curl …/setup_local.sh | bash</code> funciona — mas o comando recomendado acima (baixar e rodar) é o mais previsível.</div>
+      <div class="note cyan">O script é <b>interativo</b> (pergunta a pasta e o nome do projeto). Ele redireciona a entrada do teclado a partir do <code>/dev/tty</code>, então até o formato <code>curl -fsSL https://raw.githubusercontent.com/pycodebr/scsi_v1/main/scripts/setup_local.sh | bash</code> funciona — mas o comando recomendado acima (baixar e rodar) é o mais previsível.</div>
       <ul class="clean">
         <li><strong>macOS:</strong> instala o Homebrew se necessário e o Docker Desktop (abra o app uma vez no fim).</li>
         <li><strong>Linux:</strong> usa o gerenciador nativo (apt/dnf/pacman/zypper) e o instalador oficial da Docker. Você é adicionado ao grupo <code>docker</code> — faça <strong>logout/login</strong> uma vez para usar sem <code>sudo</code>.</li>
@@ -550,13 +550,13 @@
           <li><strong>Comando único</strong> (recomendado — baixa e executa em memória):
             <div class="code" data-lang="powershell">
               <div class="code__bar"><span class="code__lang">powershell</span><button class="copy">copiar</button></div>
-              <pre><code><span class="tok-f">irm</span> <span class="tok-u">https://pycodebr.com.br/setup_local.ps1</span> | <span class="tok-f">iex</span></code></pre>
+              <pre><code><span class="tok-f">irm</span> <span class="tok-u">https://raw.githubusercontent.com/pycodebr/scsi_v1/main/scripts/setup_local.ps1</span> | <span class="tok-f">iex</span></code></pre>
             </div>
             O <code>irm</code> baixa o script e o <code>iex</code> o executa. Como roda em memória, <strong>não precisa</strong> mexer no <code>Set-ExecutionPolicy</code> e as perguntas funcionam normalmente.
             <p style="margin-top:10px">Se preferir baixar o arquivo antes:</p>
             <div class="code" data-lang="powershell">
               <div class="code__bar"><span class="code__lang">powershell</span><button class="copy">copiar</button></div>
-              <pre><code><span class="tok-f">irm</span> <span class="tok-u">https://pycodebr.com.br/setup_local.ps1</span> -OutFile setup_local.ps1
+              <pre><code><span class="tok-f">irm</span> <span class="tok-u">https://raw.githubusercontent.com/pycodebr/scsi_v1/main/scripts/setup_local.ps1</span> -OutFile setup_local.ps1
 <span class="tok-f">Set-ExecutionPolicy</span> -Scope Process -ExecutionPolicy Bypass -Force
 .\setup_local.ps1</code></pre>
             </div>
@@ -581,7 +581,7 @@
           <li>Abra o <strong>Ubuntu</strong> (menu Iniciar) e rode o script de Linux normalmente:
             <div class="code" data-lang="bash">
               <div class="code__bar"><span class="code__lang">bash</span><button class="copy">copiar</button></div>
-              <pre><code><span class="tok-f">curl</span> -fsSL <span class="tok-u">https://pycodebr.com.br/setup_local.sh</span> -o setup_local.sh &amp;&amp; <span class="tok-f">bash</span> setup_local.sh</code></pre>
+              <pre><code><span class="tok-f">curl</span> -fsSL <span class="tok-u">https://raw.githubusercontent.com/pycodebr/scsi_v1/main/scripts/setup_local.sh</span> -o setup_local.sh &amp;&amp; <span class="tok-f">bash</span> setup_local.sh</code></pre>
             </div>
           </li>
         </ol>
@@ -608,12 +608,12 @@
         <li><strong>Comando único</strong> (recomendado — baixa e executa):
           <div class="code" data-lang="bash">
             <div class="code__bar"><span class="code__lang">bash</span><button class="copy">copiar</button></div>
-            <pre><code><span class="tok-f">curl</span> -fsSL <span class="tok-u">https://pycodebr.com.br/setup_deploy.sh</span> -o setup_deploy.sh &amp;&amp; <span class="tok-f">sudo bash</span> setup_deploy.sh</code></pre>
+            <pre><code><span class="tok-f">curl</span> -fsSL <span class="tok-u">https://raw.githubusercontent.com/pycodebr/scsi_v1/main/scripts/setup_deploy.sh</span> -o setup_deploy.sh &amp;&amp; <span class="tok-f">sudo bash</span> setup_deploy.sh</code></pre>
           </div>
           Alternativa em uma linha só, sem salvar arquivo:
           <div class="code" data-lang="bash">
             <div class="code__bar"><span class="code__lang">bash</span><button class="copy">copiar</button></div>
-            <pre><code><span class="tok-f">sudo bash</span> -c <span class="tok-s">"$(curl -fsSL https://pycodebr.com.br/setup_deploy.sh)"</span></code></pre>
+            <pre><code><span class="tok-f">sudo bash</span> -c <span class="tok-s">"$(curl -fsSL https://raw.githubusercontent.com/pycodebr/scsi_v1/main/scripts/setup_deploy.sh)"</span></code></pre>
           </div>
         </li>
       </ol>
@@ -659,9 +659,9 @@
       <p>Na VPS, <strong>como usuário <code>deploy</code></strong> (sem <code>sudo</code>). <strong>Comando único</strong> (recomendado — baixa e executa):</p>
       <div class="code" data-lang="bash">
         <div class="code__bar"><span class="code__lang">bash</span><button class="copy">copiar</button></div>
-        <pre><code><span class="tok-f">curl</span> -fsSL <span class="tok-u">https://pycodebr.com.br/setup_monitoring.sh</span> -o setup_monitoring.sh &amp;&amp; <span class="tok-f">bash</span> setup_monitoring.sh</code></pre>
+        <pre><code><span class="tok-f">curl</span> -fsSL <span class="tok-u">https://raw.githubusercontent.com/pycodebr/scsi_v1/main/scripts/setup_monitoring.sh</span> -o setup_monitoring.sh &amp;&amp; <span class="tok-f">bash</span> setup_monitoring.sh</code></pre>
       </div>
-      <div class="note cyan">O script é <b>interativo</b> e roda sobre o projeto <b>já clonado</b> (pelo <code>setup_deploy.sh</code>). Se você não estiver dentro da pasta do projeto, ele <b>pergunta o caminho</b> (sugere <code>~/&lt;projeto&gt;</code>) e segue a partir de lá — por isso <code>curl …/setup_monitoring.sh | bash</code> também funciona. Alternativa, dentro da pasta do projeto: <code>bash scripts/setup_monitoring.sh</code>.</div>
+      <div class="note cyan">O script é <b>interativo</b> e roda sobre o projeto <b>já clonado</b> (pelo <code>setup_deploy.sh</code>). Se você não estiver dentro da pasta do projeto, ele <b>pergunta o caminho</b> (sugere <code>~/&lt;projeto&gt;</code>) e segue a partir de lá — por isso <code>curl -fsSL https://raw.githubusercontent.com/pycodebr/scsi_v1/main/scripts/setup_monitoring.sh | bash</code> também funciona. Alternativa, dentro da pasta do projeto: <code>bash scripts/setup_monitoring.sh</code>.</div>
 
       <h3>O que o guia faz (passo a passo)</h3>
       <ul class="clean">
@@ -710,7 +710,7 @@
       </div>
       <div class="acc">
         <button class="acc__h">Windows: script não executa <span class="pm">+</span></button>
-        <div class="acc__b"><div class="inner">Use o comando único <code>irm …/setup_local.ps1 | iex</code> (roda em memória) ou rode <code>Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force</code> antes.</div></div>
+        <div class="acc__b"><div class="inner">Use o comando único <code>irm https://raw.githubusercontent.com/pycodebr/scsi_v1/main/scripts/setup_local.ps1 | iex</code> (roda em memória) ou rode <code>Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force</code> antes.</div></div>
       </div>
     </section>
 
@@ -826,7 +826,7 @@ document.querySelectorAll('main section[id]').forEach(s=>{if(map.has(s.id)) spy.
 (function(){
   const body=document.getElementById('termBody'); if(!body) return;
   const lines=[
-    {t:'$ ',cls:'c-g',k:'curl -fsSL pycodebr.com.br/setup_local.sh | bash',kc:'c-g'},
+    {t:'$ ',cls:'c-g',k:'curl -fsSL raw.githubusercontent.com/pycodebr/scsi_v1/main/scripts/setup_local.sh | bash',kc:'c-g'},
     {t:'',cls:'',k:'──────────────────────────────',kc:'c-c'},
     {t:'',cls:'',k:'  🚀 SETUP DE AMBIENTE · PycodeBR',kc:'c-c'},
     {t:'',cls:'',k:'──────────────────────────────',kc:'c-c'},

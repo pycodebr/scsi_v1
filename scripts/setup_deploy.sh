@@ -165,7 +165,7 @@ STATE_FILE_NAME=".setup_deploy.state"
 # URL pública do próprio script. Usada como FALLBACK no handoff root->deploy
 # quando o script roda via 'bash -c "$(curl ...)"' (sem arquivo em disco).
 # Troque pela SUA URL, ou exporte SETUP_DEPLOY_URL=... antes de rodar.
-SCRIPT_URL="${SETUP_DEPLOY_URL:-https://pycodebr.com.br/setup_deploy.sh}"
+SCRIPT_URL="${SETUP_DEPLOY_URL:-https://raw.githubusercontent.com/pycodebr/scsi_v1/main/scripts/setup_deploy.sh}"
 
 # Detecta o IP PÚBLICO da VPS (para advertise-addr do Swarm e para o DNS).
 detect_public_ip() {

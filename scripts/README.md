@@ -9,10 +9,10 @@ em cada etapa e **tratamento de erro** com motivo, linha e log completo.
 
 | Objetivo                | Script             | Onde roda | Como rodar |
 |-------------------------|--------------------|-----------|------------|
-| **Máquina local** (Linux/macOS) | `setup_local.sh`  | Seu PC    | `curl -fsSL https://pycodebr.com.br/setup_local.sh -o setup_local.sh && bash setup_local.sh` |
-| **Máquina local** (Windows)     | `setup_local.ps1` | Seu PC    | `irm https://pycodebr.com.br/setup_local.ps1 \| iex` (PowerShell **Admin**) |
-| **VPS + Deploy completo**       | `setup_deploy.sh` | Servidor  | `curl -fsSL https://pycodebr.com.br/setup_deploy.sh -o setup_deploy.sh && sudo bash setup_deploy.sh` (como **root**) |
-| **VPS · Monitoramento** *(opcional)* | `setup_monitoring.sh` | Servidor (após o deploy) | `curl -fsSL https://pycodebr.com.br/setup_monitoring.sh -o setup_monitoring.sh && bash setup_monitoring.sh` (como **deploy**) |
+| **Máquina local** (Linux/macOS) | `setup_local.sh`  | Seu PC    | `curl -fsSL https://raw.githubusercontent.com/pycodebr/scsi_v1/main/scripts/setup_local.sh -o setup_local.sh && bash setup_local.sh` |
+| **Máquina local** (Windows)     | `setup_local.ps1` | Seu PC    | `irm https://raw.githubusercontent.com/pycodebr/scsi_v1/main/scripts/setup_local.ps1 \| iex` (PowerShell **Admin**) |
+| **VPS + Deploy completo**       | `setup_deploy.sh` | Servidor  | `curl -fsSL https://raw.githubusercontent.com/pycodebr/scsi_v1/main/scripts/setup_deploy.sh -o setup_deploy.sh && sudo bash setup_deploy.sh` (como **root**) |
+| **VPS · Monitoramento** *(opcional)* | `setup_monitoring.sh` | Servidor (após o deploy) | `curl -fsSL https://raw.githubusercontent.com/pycodebr/scsi_v1/main/scripts/setup_monitoring.sh -o setup_monitoring.sh && bash setup_monitoring.sh` (como **deploy**) |
 
 O que cada script instala (se faltar): Python 3.13 + venv, Node.js + npm/npx,
 Docker + Compose, **Claude Code**, **OpenCode** e **Codex CLI**, git/curl e o
@@ -35,12 +35,12 @@ deve ser **público ou privado**, cria o repositório com o `gh` e faz o **`firs
 **Comando único** (recomendado — baixa e executa):
 
 ```bash
-curl -fsSL https://pycodebr.com.br/setup_local.sh -o setup_local.sh && bash setup_local.sh
+curl -fsSL https://raw.githubusercontent.com/pycodebr/scsi_v1/main/scripts/setup_local.sh -o setup_local.sh && bash setup_local.sh
 ```
 
 > O script é **interativo** (pergunta a pasta e o nome do projeto). Ele redireciona
 > a entrada do teclado a partir do `/dev/tty`, então até o formato
-> `curl -fsSL https://pycodebr.com.br/setup_local.sh | bash` funciona — mas o
+> `curl -fsSL https://raw.githubusercontent.com/pycodebr/scsi_v1/main/scripts/setup_local.sh | bash` funciona — mas o
 > comando recomendado acima (baixar e rodar) é o mais previsível.
 
 - **macOS**: instala o Homebrew se necessário e o Docker Desktop (abra o app uma vez no fim).
@@ -68,7 +68,7 @@ para a maioria dos alunos.
 1. Menu Iniciar → digite **PowerShell** → botão direito → **Executar como administrador**.
 2. **Comando único** (recomendado — baixa e executa em memória):
    ```powershell
-   irm https://pycodebr.com.br/setup_local.ps1 | iex
+   irm https://raw.githubusercontent.com/pycodebr/scsi_v1/main/scripts/setup_local.ps1 | iex
    ```
    O `irm` (Invoke-RestMethod) baixa o script e o `iex` (Invoke-Expression) o executa.
    Como roda em memória, **não precisa** mexer no `Set-ExecutionPolicy`, e as
@@ -76,7 +76,7 @@ para a maioria dos alunos.
 
    Se preferir baixar o arquivo antes:
    ```powershell
-   irm https://pycodebr.com.br/setup_local.ps1 -OutFile setup_local.ps1
+   irm https://raw.githubusercontent.com/pycodebr/scsi_v1/main/scripts/setup_local.ps1 -OutFile setup_local.ps1
    Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
    .\setup_local.ps1
    ```
@@ -99,7 +99,7 @@ Para quem prefere um ambiente Linux limpo (mesmos comandos do Linux/macOS):
    Integration*, ative o Ubuntu). Alternativamente, instale o Docker Engine direto dentro do Ubuntu.
 3. Abra o **Ubuntu** (menu Iniciar) e rode o script de Linux normalmente:
    ```bash
-   curl -fsSL https://pycodebr.com.br/setup_local.sh -o setup_local.sh && bash setup_local.sh
+   curl -fsSL https://raw.githubusercontent.com/pycodebr/scsi_v1/main/scripts/setup_local.sh -o setup_local.sh && bash setup_local.sh
    ```
 
 > Dica: trabalhe com os arquivos **dentro** do filesystem do WSL (ex.: `~/projects`),
@@ -125,11 +125,11 @@ levar o sistema do zero até o ar.
 1. Acesse a VPS **como root** (ex.: `ssh root@SEU_IP`).
 2. Rode o **comando único** (recomendado — baixa e executa):
    ```bash
-   curl -fsSL https://pycodebr.com.br/setup_deploy.sh -o setup_deploy.sh && sudo bash setup_deploy.sh
+   curl -fsSL https://raw.githubusercontent.com/pycodebr/scsi_v1/main/scripts/setup_deploy.sh -o setup_deploy.sh && sudo bash setup_deploy.sh
    ```
    Alternativa em uma linha só, sem salvar arquivo:
    ```bash
-   sudo bash -c "$(curl -fsSL https://pycodebr.com.br/setup_deploy.sh)"
+   sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/pycodebr/scsi_v1/main/scripts/setup_deploy.sh)"
    ```
 
 > **Sobre `curl ... | bash`:** este script é **interativo** e troca de usuário no
@@ -200,13 +200,13 @@ subir/atualizar a monitoria **não** redeploya o app, e vice-versa.
 Na VPS, **como usuário `deploy`** (não precisa de `sudo`). **Comando único**
 (recomendado — baixa e executa):
 ```bash
-curl -fsSL https://pycodebr.com.br/setup_monitoring.sh -o setup_monitoring.sh && bash setup_monitoring.sh
+curl -fsSL https://raw.githubusercontent.com/pycodebr/scsi_v1/main/scripts/setup_monitoring.sh -o setup_monitoring.sh && bash setup_monitoring.sh
 ```
 
 > O script é **interativo** e roda sobre o projeto **já clonado** (pelo
 > `setup_deploy.sh`). Se você não estiver dentro da pasta do projeto, ele
 > **pergunta o caminho** (sugere `~/<projeto>`) e segue a partir de lá. Por isso
-> o formato `curl …/setup_monitoring.sh | bash` também funciona — ele redireciona
+> o formato `curl -fsSL https://raw.githubusercontent.com/pycodebr/scsi_v1/main/scripts/setup_monitoring.sh | bash` também funciona — ele redireciona
 > o teclado a partir do `/dev/tty`.
 
 Alternativa, já dentro da pasta do projeto (usa a cópia versionada no repo):
