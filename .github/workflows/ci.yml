@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Instalar dependências
+        run: pip install -r requirements.txt
+
+      - name: Django check
+        run: python manage.py check
+        env:
+          SECRET_KEY: ci-test-key-not-for-prod
+          DEBUG: 'True'
+          ALLOWED_HOSTS: localhost,127.0.0.1,testserver
+
+      - name: Migrations em dia
+        run: python manage.py makemigrations --check --dry-run
+        env:
+          SECRET_KEY: ci-test-key-not-for-prod
+          DEBUG: 'True'
+          ALLOWED_HOSTS: localhost,127.0.0.1,testserver
+
+      - name: Smoke tests
+        run: python manage.py test core.tests_smoke
+        env:
+          SECRET_KEY: ci-test-key-not-for-prod
+          DEBUG: 'True'
+          ALLOWED_HOSTS: localhost,127.0.0.1,testserver

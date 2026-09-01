@@ -27,10 +27,12 @@ environ.Env.read_env(BASE_DIR / '.env')
 
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = env('SECRET_KEY', default='django-insecure-change-me-in-production')
+# [FIX 1.1 do report-security.md] Sem default inseguro: falha cedo se ausente.
+SECRET_KEY = env('SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = env('DEBUG')
+# [FIX 1.2 do report-security.md] Default explícito False (fail-safe).
+DEBUG = env.bool('DEBUG', default=False)
 
 ALLOWED_HOSTS = env('ALLOWED_HOSTS')
 
@@ -52,6 +54,12 @@ THIRD_PARTY_APPS = [
     'django_celery_beat',
     'django_celery_results',
     'dj_celery_panel',
+    # Login com Google (padrão Lemos Tech) + anti-bruteforce
+    'allauth',
+    'allauth.account',
+    'allauth.socialaccount',
+    'allauth.socialaccount.providers.google',
+    'axes',
 ]
 
 LOCAL_APPS = [
@@ -84,6 +92,8 @@ MIDDLEWARE = [
     'tenants.middleware.TenantMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'allauth.account.middleware.AccountMiddleware',
+    'axes.middleware.AxesMiddleware',
 ]
 
 ROOT_URLCONF = 'core.urls'
@@ -122,9 +132,51 @@ DATABASES = {
 AUTH_USER_MODEL = 'accounts.User'
 
 AUTHENTICATION_BACKENDS = [
+    # axes primeiro: intercepta tentativas de bruteforce
+    'axes.backends.AxesStandaloneBackend',
     'accounts.backends.EmailBackend',
     'django.contrib.auth.backends.ModelBackend',
+    # allauth: login social Google; AuthenticationBackend respeita
+    # ACCOUNT_USER_MODEL_USERNAME_FIELD=None (User do SCSI é por e-mail)
+    'allauth.account.auth_backends.AuthenticationBackend',
 ]
+
+# allauth — login com Google (ADICIONAL ao login local por e-mail)
+SITE_ID = 1
+ACCOUNT_EMAIL_VERIFICATION = 'none'
+# User do SCSI não tem username (USERNAME_FIELD='email'): informar ao allauth
+ACCOUNT_USER_MODEL_USERNAME_FIELD = None
+ACCOUNT_USER_MODEL_EMAIL_FIELD = 'email'
+ACCOUNT_LOGIN_METHODS = {'email'}
+ACCOUNT_SIGNUP_FIELDS = ['email*']  # cadastro social: e-mail obrigatório
+SOCIALACCOUNT_ALLOW_SIGNUP = True
+SOCIALACCOUNT_AUTO_SIGNUP = True
+SOCIALACCOUNT_LOGIN_ON_GET = True
+SOCIALACCOUNT_EMAIL_REQUIRED = True
+SOCIALACCOUNT_QUERY_EMAIL = True
+SOCIALACCOUNT_STORE_TOKENS = False
+
+SOCIALACCOUNT_PROVIDERS = {
+    'google': {
+        'APP': {
+            'client_id': env('GOOGLE_OAUTH_CLIENT_ID', default=''),
+            'secret': env('GOOGLE_OAUTH_SECRET', default=''),
+            'key': '',
+        },
+        'SCOPE': ['profile', 'email'],
+        'AUTH_PARAMS': {'access_type': 'online', 'prompt': 'select_account'},
+    }
+}
+
+# axes — anti-bruteforce (protege o login local e o /admin)
+# User do SCSI é por e-mail (USERNAME_FIELD='email'), sem campo username.
+AXES_FAILURE_LIMIT = 5
+AXES_COOLOFF_TIME = 1
+AXES_LOCKOUT_PARAMETERS = ['ip_address']
+AXES_RESET_ON_SUCCESS = True
+
+# E-mails com acesso administrativo garantido via Google (opcional)
+STAFF_EMAILS = [e.strip().lower() for e in env.list('STAFF_EMAILS', default=[]) if e.strip()]
 
 LOGIN_URL = 'accounts:login'
 LOGIN_REDIRECT_URL = 'dashboard:dashboard'
@@ -250,6 +302,16 @@ if not DEBUG:
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
     X_FRAME_OPTIONS = 'DENY'
+
+# [FIX: headers ausentes] Proteções que valem também em dev — sempre ativas.
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = 'Lax'
+SESSION_COOKIE_AGE = 60 * 60 * 8      # sessão expira em 8h
+SESSION_SAVE_EVERY_REQUEST = True     # renova timeout a cada request
+CSRF_COOKIE_HTTPONLY = True
+CSRF_COOKIE_SAMESITE = 'Lax'
+SECURE_REFERRER_POLICY = 'same-origin'
+SECURE_CROSS_ORIGIN_OPENER_POLICY = 'same-origin'
 
 
 # Logging

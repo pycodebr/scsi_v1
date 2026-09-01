@@ -43,6 +43,8 @@ class LandingPageView(TemplateView):
 urlpatterns = [
     path('health/', health_check, name='health'),
     path('admin/', admin.site.urls),
+    # allauth: /accounts/google/login/ (login com Google)
+    path('social/', include('allauth.urls')),
     path('', LandingPageView.as_view(), name='landing'),
     path('dashboard/', include('dashboard.urls')),
     path('accounts/', include('accounts.urls')),
