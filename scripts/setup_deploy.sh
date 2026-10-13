@@ -608,7 +608,25 @@ SSHCFG
 
   # ── .env: o usuário COLA o conteúdo do projeto ──
   step "Criando o arquivo .env (cole o conteúdo do seu projeto)"
-  if [[ -s .env ]] && ! confirm_SN ".env já existe e tem conteúdo. Quer substituir?"; then
+  # Projetos que trazem scripts/generate_env.sh (ex.: hweb_ui) podem gerar o
+  # .env de forma guiada — chaves e senhas fortes sem montar nada à mão.
+  # Sem esse arquivo, o fluxo é exatamente o de sempre (colar o .env).
+  local env_mode="colar"
+  if [[ -f scripts/generate_env.sh ]]; then
+    if [[ -s .env ]] && ! confirm_SN ".env já existe e tem conteúdo. Quer gerar/atualizar mesmo assim (as chaves atuais são mantidas)?"; then
+      env_mode="manter"
+    elif confirm_SN "Este projeto gera o .env de forma guiada (recomendado). Usar o gerador?"; then
+      env_mode="gerar"
+    fi
+  fi
+  if [[ "$env_mode" == "manter" ]]; then
+    skip ".env mantido"
+  elif [[ "$env_mode" == "gerar" ]]; then
+    bash scripts/generate_env.sh
+    [[ -s .env ]] || { echo ".env não foi gerado — não dá para seguir."; exit 1; }
+    chmod 600 .env
+    ok ".env gerado ($(wc -l <.env | tr -d ' ') linhas)"
+  elif [[ -s .env ]] && ! confirm_SN ".env já existe e tem conteúdo. Quer substituir?"; then
     skip ".env mantido"
   else
     action_box \
@@ -796,6 +814,18 @@ SSHCFG
     warn "Acompanhe: docker service logs -f ${STACK_NAME}_traefik   e   ${STACK_NAME}_app"
   fi
 
+  # ── Pós-deploy ──
+  # Se o projeto trouxer scripts/post_deploy.sh, ele decide o que fazer (ex.:
+  # hweb_ui não usa dados de demonstração). Sem esse arquivo, segue o padrão
+  # do SCSI: seed_demo --force, igual ao Notion.
+  if [[ -f scripts/post_deploy.sh ]]; then
+    step "Conferência pós-deploy (scripts/post_deploy.sh)"
+    if bash scripts/post_deploy.sh 2>&1 | tee -a "$LOG_FILE"; then
+      ok "Pós-deploy concluído"
+    else
+      warn "O pós-deploy reportou pendências (veja acima). Rode de novo depois: bash scripts/post_deploy.sh"
+    fi
+  else
   # ── Seed de dados (seed_demo --force, igual ao Notion) ──
   step "Populando dados de demonstração (seed_demo --force)"
   local app_cid=""
@@ -812,6 +842,7 @@ SSHCFG
     fi
   else
     warn "Container do app ainda não está pronto — rode o seed depois (instruções abaixo)."
+  fi
   fi
 
   # ── Final ──
@@ -834,7 +865,11 @@ print_final_instructions() {
   echo "    • Status...........: ${CYAN}docker stack services ${STACK_NAME}${RESET}"
   echo "    • Volumes..........: ${CYAN}docker volume ls | grep ${STACK_NAME}${RESET}"
   echo "    • Superusuário.....: ${CYAN}APP=\$(docker ps --filter name=${STACK_NAME}_app -q | head -1); docker exec -it \$APP python manage.py createsuperuser${RESET}"
-  echo "    • Rodar seed.......: ${CYAN}APP=\$(docker ps --filter name=${STACK_NAME}_app -q | head -1); docker exec -it \$APP python manage.py seed_demo --force${RESET}"
+  if [[ -f scripts/post_deploy.sh ]]; then
+    echo "    • Pós-deploy.......: ${CYAN}bash scripts/post_deploy.sh${RESET}"
+  else
+    echo "    • Rodar seed.......: ${CYAN}APP=\$(docker ps --filter name=${STACK_NAME}_app -q | head -1); docker exec -it \$APP python manage.py seed_demo --force${RESET}"
+  fi
   echo ""
   echo "  ${BOLD}Para fazer deploy após alterações no código:${RESET}"
   echo "    ${CYAN}cd ${PROJECT_DIR}${RESET}"

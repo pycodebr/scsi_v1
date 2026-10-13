@@ -185,6 +185,29 @@ cd "$REPO_DIR"
 [[ -f .env ]] || { echo "  ${RED}.env não encontrado em $REPO_DIR — rode o setup_deploy.sh antes.${RESET}"; exit 1; }
 ok "Projeto: ${BOLD}${REPO_DIR}${RESET}"
 
+# Identidade do projeto na monitoria. Padrão: SCSI. Outro projeto com a mesma
+# estrutura (ex.: hweb_ui) traz monitoring/project.env com seus valores:
+#   PROJECT_STACK, METRIC_NAMESPACE, DASHBOARD_FILE, DASHBOARD_TITLE
+PROJECT_STACK="scsi_v1"
+METRIC_NAMESPACE_DEFAULT="scsi"
+DASHBOARD_FILE="scsi-overview.json"
+DASHBOARD_TITLE="SCSI — Visão Geral"
+if [[ -f monitoring/project.env ]]; then
+  while IFS= read -r line || [ -n "$line" ]; do
+    line="${line%$'\r'}"
+    case "$line" in ''|\#*) continue ;; esac
+    k="${line%%=*}"; v="${line#*=}"
+    v="${v%\"}"; v="${v#\"}"
+    case "$k" in
+      PROJECT_STACK) PROJECT_STACK="$v" ;;
+      METRIC_NAMESPACE) METRIC_NAMESPACE_DEFAULT="$v" ;;
+      DASHBOARD_FILE) DASHBOARD_FILE="$v" ;;
+      DASHBOARD_TITLE) DASHBOARD_TITLE="$v" ;;
+    esac
+  done < monitoring/project.env
+  info "Projeto na monitoria: ${BOLD}${PROJECT_STACK}${RESET} (monitoring/project.env)"
+fi
+
 # ── PASSO 2 — Checar pré-requisitos (Docker / Swarm / Traefik) ──
 step "Verificando o ambiente (Docker, Swarm e Traefik)"
 have docker || { echo "  ${RED}Docker não encontrado. Rode o setup_deploy.sh primeiro.${RESET}"; exit 1; }
@@ -249,7 +272,7 @@ ok "Credenciais do Grafana salvas no .env"
 step "Definindo retenção de métricas e logs"
 [[ -n "$(get_env_var PROMETHEUS_RETENTION)" ]]      || set_env_var "PROMETHEUS_RETENTION" "15d"
 [[ -n "$(get_env_var LOKI_RETENTION)" ]]            || set_env_var "LOKI_RETENTION" "360h"
-[[ -n "$(get_env_var PROMETHEUS_METRIC_NAMESPACE)" ]] || set_env_var "PROMETHEUS_METRIC_NAMESPACE" "scsi"
+[[ -n "$(get_env_var PROMETHEUS_METRIC_NAMESPACE)" ]] || set_env_var "PROMETHEUS_METRIC_NAMESPACE" "$METRIC_NAMESPACE_DEFAULT"
 info "Métricas guardadas por ${BOLD}$(get_env_var PROMETHEUS_RETENTION)${RESET}; logs por ${BOLD}$(get_env_var LOKI_RETENTION)${RESET}"
 info "Namespace das métricas: ${BOLD}$(get_env_var PROMETHEUS_METRIC_NAMESPACE)${RESET}"
 
@@ -353,7 +376,7 @@ for f in \
     "monitoring/promtail/promtail-config.yml" \
     "monitoring/grafana/provisioning/datasources/datasources.yml" \
     "monitoring/grafana/provisioning/dashboards/dashboards.yml" \
-    "monitoring/grafana/dashboards/scsi-overview.json" ; do
+    "monitoring/grafana/dashboards/${DASHBOARD_FILE}" ; do
   if [[ -f "$REPO_DIR/$f" ]]; then ok "encontrado: $f"; else warn "AUSENTE: $f"; MISSING=1; fi
 done
 [[ "$MISSING" -eq 0 ]] || { echo "  ${RED}Faltam arquivos de config — verifique o clone do repositório.${RESET}"; exit 1; }
@@ -422,17 +445,17 @@ echo "     senha:   ${BOLD}${GRAFANA_PASS_VAL}${RESET}   ${GREY}(guarde com cuid
 echo ""
 echo "  ${BOLD}Já vem pronto (provisionado):${RESET}"
 echo "     • Fontes de dados Prometheus e Loki conectadas"
-echo "     • Dashboard ${BOLD}\"SCSI — Visão Geral\"${RESET} (pasta SCSI no Grafana)"
+echo "     • Dashboard ${BOLD}\"${DASHBOARD_TITLE}\"${RESET} (provisionado no Grafana)"
 echo ""
 echo "  ${BOLD}Dashboards extras da comunidade${RESET} (Grafana > Dashboards > Import > ID):"
 echo "     • ${BOLD}1860${RESET}   Node Exporter Full (servidor) — funciona direto"
 echo "     • ${BOLD}14282${RESET}  Cadvisor exporter (containers) — funciona direto"
 echo "     • ${BOLD}21154${RESET}  Docker overview (cAdvisor + node)"
 echo "     ${GREY}Dashboards de Django (9528/17658) precisam trocar o prefixo das${RESET}"
-echo "     ${GREY}métricas para 'scsi_' — prefira o dashboard 'SCSI — Visão Geral'.${RESET}"
+echo "     ${GREY}métricas para '${METRIC_NAMESPACE_DEFAULT}_' — prefira o dashboard '${DASHBOARD_TITLE}'.${RESET}"
 echo ""
 echo "  ${BOLD}Ver os logs:${RESET} Grafana > Explore > fonte ${BOLD}Loki${RESET} > consulta:"
-echo "     {stack=\"scsi_v1\"}"
+echo "     {stack=\"${PROJECT_STACK}\"}"
 echo ""
 echo "  ${BOLD}Conferir os alvos:${RESET} Grafana > Explore > Prometheus > consulta: up"
 echo "     (cada alvo deve aparecer com valor 1)"

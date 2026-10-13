@@ -182,6 +182,16 @@ git pull && ./scripts/deploy.sh          # build + push + deploy
 
 ---
 
+### Usando em outros projetos (ganchos opcionais)
+
+O `setup_deploy.sh` e o `setup_monitoring.sh` funcionam em qualquer projeto com a mesma estrutura (`docker-stack.yml`, `scripts/deploy.sh`, `monitoring-stack.yml`). Três arquivos opcionais no repositório do projeto adaptam o fluxo, sem mudar nada para quem não os tem:
+
+- `scripts/generate_env.sh`: o setup oferece gerar o `.env` de forma guiada, com chaves e senhas fortes, em vez de colar.
+- `scripts/post_deploy.sh`: substitui o passo `seed_demo --force` (por exemplo, para conferir o sistema sem criar dados de demonstração).
+- `monitoring/project.env`: define `PROJECT_STACK`, `METRIC_NAMESPACE`, `DASHBOARD_FILE` e `DASHBOARD_TITLE` usados pelo guia de monitoramento.
+
+O projeto **hweb_ui** usa os três.
+
 ## VPS — monitoramento e observabilidade (`setup_monitoring.sh`)
 
 Sobe, **separadamente** e **sem mexer no sistema em produção**, a stack de
